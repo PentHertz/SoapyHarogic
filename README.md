@@ -26,7 +26,7 @@ This module allows software that supports the SoapySDR API (like GQRX, GNU Radio
 Before building, you must have the following installed on your system:
 
 - **SoapySDR Development Libraries**: libsoapysdr-dev
-- **Harogic HTRA API**: The libhtra_api.so library and the htra_api.h header file must be installed in a system path (e.g., /usr/local/lib/ and /usr/local/include/).
+- **Harogic HTRA API**: The libhtra_api.so library and the htra_api.h header file must be installed in a system path (e.g., /usr/local/lib/, /usr/local/include/, or in /opt/htraapi/***).
 - **CMake**: cmake
 - **A C++ Compiler**: g++
 
@@ -36,7 +36,7 @@ On a Debian/Ubuntu-based system, you can install the dependencies with:
 sudo apt-get update
 sudo apt-get install build-essential cmake libsoapysdr-dev
 ```
-
+To finish, Calibration data must be placed in `/usr/bin/CalFile` directory in order to work.
 
 ## Installation
 
@@ -61,7 +61,7 @@ Install the compiled module to a system-wide SoapySDR path:
 sudo make install
 ```
 
-This will typically copy libsoapyharogic.so to /usr/local/lib/SoapySDR/modules0.8/.
+This will typically copy `libsoapyharogic.so` to `/usr/local/lib/SoapySDR/modules0.8/`.
 
 ### 3. USB Device Permissions (udev rule)
 
