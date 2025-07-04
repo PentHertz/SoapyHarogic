@@ -114,8 +114,8 @@ The primary gain setting for this device is the **Reference Level**. This is a c
 
 The device automatically uses different ADC sample resolutions depending on the selected sample rate to optimize performance. This driver handles the conversion automatically. 🤖
 
-- ⚡ For sample rates **greater than 6.2 MS/s**, the device will stream in **8-bit** format (CS8)
-- 🎯 For sample rates **at or below 6.2 MS/s**, the device will stream in **16-bit** format (CS16)
+- ⚡ For sample rates **greater than 64 MS/s**, the device will stream in **8-bit** format (CS8)
+- 🎯 For sample rates **at or below 64 MS/s**, the device will stream in **16-bit** format (CS16)
 
 The driver always converts the native samples to 32-bit complex floats (CF32) for the application, so this is handled transparently. ✨
 
