@@ -99,6 +99,28 @@ Found 1 device(s)
   0: driver=Harogic, label=Harogic 313**********, serial=3132***********
 ```
 
+## Important Usage Notes
+
+### Gain Control and Error -12 (IF Overflow)
+
+The primary gain setting for this device is the **Reference Level**. This is a critical parameter that must be set correctly to avoid errors.
+
+- If the Reference Level is set **too high** (e.g., 0 dBm, 7 dBm), the device's internal amplifiers may saturate. This will cause the device API to return an **IF Overflow** error (error code -12). In applications like GQRX or GNU Radio, this may appear as a STREAM_ERROR and the stream will stop. **If you see error -12, you must lower the Reference Level.**
+- If the Reference Level is set **too low** (e.g., -90 dBm, -100 dBm), you may not see any signals, and the FFT display will look like a flat noise floor.
+    
+
+A good starting point for the Reference Level is typically between **-30 dBm and -50 dBm**. You will need to adjust it based on your antenna and the strength of the signals in your environment.
+
+### Sample Format (8-bit vs. 16-bit)
+
+The device automatically uses different ADC sample resolutions depending on the selected sample rate to optimize performance. This driver handles the conversion automatically.
+
+- For sample rates **greater than 6.2 MS/s**, the device will stream in **8-bit** format (CS8).
+- For sample rates **at or below 6.2 MS/s**, the device will stream in **16-bit** format (CS16).
+    
+
+The driver always converts the native samples to 32-bit complex floats (CF32) for the application, so this is handled transparently.
+
 ## Usage
 
 ### GQRX
