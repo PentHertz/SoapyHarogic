@@ -74,7 +74,7 @@ For non-root users to access the device, you must install a udev rule.
   sudo cp ../99-harogic.rules /etc/udev/rules.d/
   ```
     
-    (If you don't use the provided file, make sure your custom rule looks like this, replacing the IDs with your device's actual IDs: SUBSYSTEM=="usb", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", MODE="0666")
+(If you don't use the provided file, make sure your custom rule looks like this, replacing the IDs with your device's actual IDs: SUBSYSTEM=="usb", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", MODE="0666")
     
 4. Reload the udev rules and trigger them:
     ```
