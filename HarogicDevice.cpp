@@ -33,7 +33,8 @@ SoapyHarogic::SoapyHarogic(const SoapySDR::Kwargs &args) :
     _gain_strategy(LowNoisePreferred),
     _preamp_mode(AutoOn),
     _if_agc(false),
-    _lo_mode(LOOpt_Auto)
+    _lo_mode(LOOpt_Auto),
+    _force_8bit(false)
 {
     if (args.count("serial")) _serial = args.at("serial");
 
@@ -107,14 +108,47 @@ std::string SoapyHarogic::getNativeStreamFormat(const int, const size_t, double 
     if (_sample_rate > RESOLTRIG) { fullScale = 128.0; return SOAPY_SDR_CS8; }
     fullScale = 32768.0; return SOAPY_SDR_CS16;
 }
-SoapySDR::ArgInfoList SoapyHarogic::getStreamArgsInfo(const int, const size_t) const { return {}; }
-SoapySDR::Stream *SoapyHarogic::setupStream(const int direction, const std::string &format, const std::vector<size_t> &, const SoapySDR::Kwargs &) {
+
+SoapySDR::ArgInfoList SoapyHarogic::getStreamArgsInfo(const int, const size_t) const {
+    SoapySDR::ArgInfoList infos;
+
+    SoapySDR::ArgInfo force_8bit_arg;
+    force_8bit_arg.key = "force_8bit";
+    force_8bit_arg.name = "Force 8-Bit";
+    force_8bit_arg.description = "Force 8-bit sample format regardless of the sample rate.";
+    force_8bit_arg.type = SoapySDR::ArgInfo::BOOL;
+    force_8bit_arg.value = "false"; // Default value
+
+    infos.push_back(force_8bit_arg);
+
+    return infos;
+}
+
+SoapySDR::Stream *SoapyHarogic::setupStream(const int direction, const std::string &format, const std::vector<size_t> &, const SoapySDR::Kwargs &args) {
     if (direction != SOAPY_SDR_RX) throw std::runtime_error("Harogic driver only supports RX");
     if (format != SOAPY_SDR_CF32) throw std::runtime_error("Please request CF32 format.");
-    _samps_int8 = (_sample_rate > RESOLTRIG);
+
+    // Check if the user wants to force 8-bit mode
+    if (args.count("force_8bit")) {
+        _force_8bit = (args.at("force_8bit") == "true");
+    }
+
+    // Update the logic: use 8-bit if the rate is high OR if forced by the user
+    _samps_int8 = (_sample_rate > RESOLTRIG) || _force_8bit;
+
+    if (_force_8bit) {
+        SoapySDR_log(SOAPY_SDR_INFO, "User has forced 8-bit sample mode.");
+    }
+
     return (SoapySDR::Stream *)this;
 }
-void SoapyHarogic::closeStream(SoapySDR::Stream *stream) { this->deactivateStream(stream, 0, 0); _ring_buffer.clear(); }
+
+void SoapyHarogic::closeStream(SoapySDR::Stream *stream) {
+    this->deactivateStream(stream, 0, 0); 
+    _ring_buffer.clear();
+    _force_8bit = false; // <<< ADD THIS LINE to reset the flag
+}
+
 size_t SoapyHarogic::getStreamMTU(SoapySDR::Stream *) const { return _mtu; }
 
 int SoapyHarogic::activateStream(SoapySDR::Stream *, const int, const long long, const size_t) {
@@ -331,7 +365,7 @@ void SoapyHarogic::_apply_settings() {
     SoapySDR_logf(SOAPY_SDR_INFO, "  - New Preamp State:    %s", (_preamp_mode == AutoOn) ? "Auto" : "Off");
     SoapySDR_log(SOAPY_SDR_INFO, "------------------------------");
 
-    _samps_int8 = (_sample_rate > RESOLTRIG);
+    _samps_int8 = (_sample_rate > RESOLTRIG) || _force_8bit;
     _profile.DataFormat = _samps_int8 ? Complex8bit : Complex16bit;
     _profile.CenterFreq_Hz = _center_freq;
     _profile.RefLevel_dBm = _ref_level;

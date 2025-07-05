@@ -196,4 +196,5 @@ class SoapyHarogic : public SoapySDR::Device
         LOOptimization_TypeDef _lo_mode;
         std::vector<double> _available_sample_rates;
         std::map<std::string, RxPort_TypeDef> _rx_ports;
+        bool _force_8bit;
 };
