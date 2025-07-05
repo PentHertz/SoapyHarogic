@@ -240,4 +240,29 @@ Use the **Soapy Custom Source** block for full control. 🎛️
 
 ---
 
+## ⚡ Performance Tuning and Testing
+
+High-speed SDR streaming (over 60 MS/s) is demanding on the host computer's USB subsystem and CPU. If you experience stream interruptions (often shown as T for timeout or O for overflow in the console), you may need to tune your system for performance.
+
+### Performance Tuning Script
+
+This repository includes a Bash script, performance_mode.sh, to help apply common system optimizations.
+
+**Usage:**
+
+```bash
+# Run the script with sudo
+sudo ./performance_mode.sh
+```
+
+The script provides an interactive menu to:
+
+1. **Set CPU Governor to 'performance'**: Prevents CPU from down-clocking, reducing latency.
+2. **Disable USB Autosuspend**: Stops the kernel from trying to power-save the active SDR.
+3. **Increase USB-FS Memory Buffer**: Allocates more RAM for USB transfers, critical for high data rates.
+4. **Set USB 3.0 IRQ Affinity**: Pins the USB controller's interrupts to a specific CPU core to reduce jitter.
+5. **Disable DRM KMS Polling**: Reduces display driver-related system load.
+    
+You can apply all tweaks at once or individually. A "Revert to Defaults" option is also available. It is recommended to apply these tweaks before running high-bandwidth applications.
+
 🎉 **Happy SDR-ing!** If you encounter any issues, please check the troubleshooting section or open an issue on GitHub. 🐛➡️🔧
