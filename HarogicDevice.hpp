@@ -41,6 +41,7 @@
 #define RESOLTRIG 62e6 // thresold for 8-bit resolution
 #define MIN_FREQ 9e3
 #define MAX_FREQ 40e9
+#define RING_BUFFER_SIZE (16 * 1024 * 1024) // 16 Mega-samples, a robust size
 
 // Ring buffer for thread-safe sample transfer
 template <typename T>

@@ -26,7 +26,7 @@ SoapyHarogic::SoapyHarogic(const SoapySDR::Kwargs &args) :
     _samps_int8(false),
     _mtu(0),
     _rx_thread_running(false),
-    _ring_buffer(16 * 16384),
+    _ring_buffer(RING_BUFFER_SIZE),
     _sample_rate(0.0),
     _center_freq(100e6),
     _ref_level(-40),
@@ -159,10 +159,13 @@ int SoapyHarogic::activateStream(SoapySDR::Stream *, const int, const long long,
     bprofile.DevicePowerSupply = DevicePowerSupply_TypeDef::USBPortAndPowerPort;
     BootInfo_TypeDef binfo;
     int ret = Device_Open(&_dev_handle, _dev_index, &bprofile, &binfo);
-    if (ret < 0) { SoapySDR_logf(SOAPY_SDR_ERROR, "activateStream: Device_Open failed: %d", ret); return SOAPY_SDR_STREAM_ERROR; }
+    if (ret < 0) { 
+        SoapySDR_logf(SOAPY_SDR_ERROR, "activateStream: Device_Open failed: %d", ret); return SOAPY_SDR_STREAM_ERROR;
+        SoapySDR_log(SOAPY_SDR_WARNING, "At high sample rates, ensure the device is on a dedicated USB 3.0+ port with sufficient power.");
+    }
     IQS_ProfileDeInit(&_dev_handle, &_profile);
     _profile.Atten = -1;
-    _profile.BusTimeout_ms = 100;
+    _profile.BusTimeout_ms = 1000;
     _profile.TriggerSource = Bus;
     _profile.TriggerMode = Adaptive;
     _profile.DataFormat = _samps_int8 ? Complex8bit : Complex16bit;
