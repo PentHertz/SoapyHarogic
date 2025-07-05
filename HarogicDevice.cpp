@@ -59,6 +59,9 @@ SoapyHarogic::SoapyHarogic(const SoapySDR::Kwargs &args) :
 
     if (_dev_index == -1) throw std::runtime_error("Harogic device not found for serial: " + _serial);
     SoapySDR_logf(SOAPY_SDR_INFO, "Found Harogic device: %s (Index %d)", _serial.c_str(), _dev_index);
+    SoapySDR_logf(SOAPY_SDR_INFO, "  - Device Model: %u", _dev_info.Model);
+    SoapySDR_logf(SOAPY_SDR_INFO, "  - Hardware Version: %u", _dev_info.HardwareVersion);
+
 
     if (Device_Open(&dev_tmp, _dev_index, &profile, &binfo) < 0) {
         throw std::runtime_error("Failed to open device to query capabilities.");
@@ -101,14 +104,14 @@ SoapySDR::Kwargs SoapyHarogic::getHardwareInfo() const {
 size_t SoapyHarogic::getNumChannels(const int dir) const { return (dir == SOAPY_SDR_RX) ? 1 : 0; }
 std::vector<std::string> SoapyHarogic::getStreamFormats(const int, const size_t) const { return {SOAPY_SDR_CF32}; }
 std::string SoapyHarogic::getNativeStreamFormat(const int, const size_t, double &fullScale) const {
-    if (_sample_rate > 61e6) { fullScale = 128.0; return SOAPY_SDR_CS8; }
+    if (_sample_rate > RESOLTRIG) { fullScale = 128.0; return SOAPY_SDR_CS8; }
     fullScale = 32768.0; return SOAPY_SDR_CS16;
 }
 SoapySDR::ArgInfoList SoapyHarogic::getStreamArgsInfo(const int, const size_t) const { return {}; }
 SoapySDR::Stream *SoapyHarogic::setupStream(const int direction, const std::string &format, const std::vector<size_t> &, const SoapySDR::Kwargs &) {
     if (direction != SOAPY_SDR_RX) throw std::runtime_error("Harogic driver only supports RX");
     if (format != SOAPY_SDR_CF32) throw std::runtime_error("Please request CF32 format.");
-    _samps_int8 = (_sample_rate > 64e6);
+    _samps_int8 = (_sample_rate > RESOLTRIG);
     return (SoapySDR::Stream *)this;
 }
 void SoapyHarogic::closeStream(SoapySDR::Stream *stream) { this->deactivateStream(stream, 0, 0); _ring_buffer.clear(); }
@@ -313,7 +316,7 @@ SoapySDR::Range SoapyHarogic::getGainRange(const int, const size_t, const std::s
 void SoapyHarogic::setFrequency(const int, const size_t, const std::string &, const double frequency, const SoapySDR::Kwargs &) { _center_freq = frequency; if (_rx_thread_running) _apply_settings(); }
 double SoapyHarogic::getFrequency(const int, const size_t, const std::string &) const { return _center_freq; }
 std::vector<std::string> SoapyHarogic::listFrequencies(const int, const size_t) const { return {"RF"}; }
-SoapySDR::RangeList SoapyHarogic::getFrequencyRange(const int, const size_t, const std::string &) const { return {SoapySDR::Range(1e6, 6000e6)}; }
+SoapySDR::RangeList SoapyHarogic::getFrequencyRange(const int, const size_t, const std::string &) const { return {SoapySDR::Range(MIN_FREQ, MAX_FREQ)}; }
 void SoapyHarogic::setSampleRate(const int, const size_t, const double rate) { _sample_rate = rate; if (_rx_thread_running) _apply_settings(); }
 double SoapyHarogic::getSampleRate(const int, const size_t) const { return _sample_rate; }
 std::vector<double> SoapyHarogic::listSampleRates(const int, const size_t) const { return _available_sample_rates; }
@@ -328,7 +331,7 @@ void SoapyHarogic::_apply_settings() {
     SoapySDR_logf(SOAPY_SDR_INFO, "  - New Preamp State:    %s", (_preamp_mode == AutoOn) ? "Auto" : "Off");
     SoapySDR_log(SOAPY_SDR_INFO, "------------------------------");
 
-    _samps_int8 = (_sample_rate > 64e6);
+    _samps_int8 = (_sample_rate > RESOLTRIG);
     _profile.DataFormat = _samps_int8 ? Complex8bit : Complex16bit;
     _profile.CenterFreq_Hz = _center_freq;
     _profile.RefLevel_dBm = _ref_level;

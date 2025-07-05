@@ -38,6 +38,10 @@
 #include <algorithm>
 #include <cinttypes>
 
+#define RESOLTRIG 62e6 // thresold for 8-bit resolution
+#define MIN_FREQ 9e3
+#define MAX_FREQ 40e9
+
 // Ring buffer for thread-safe sample transfer
 template <typename T>
 class RingBuffer
