@@ -145,7 +145,7 @@ These arguments configure the data stream itself and are typically set once befo
 |   |   |   |   |
 |---|---|---|---|
 |Argument Key|Example Value|Default|Description|
-|force_8bit|true|false|If true, forces the device to use the 8-bit sample format (CS8) regardless of the sample rate. By default, the driver uses 8-bit mode only for rates above 62 MS/s. This can be useful for reducing USB bandwidth at lower rates.|
+|force_8bit|true|false|If true, forces the device to use the 8-bit sample format (CS8) regardless of the sample rate. By default, the driver uses 8-bit mode only for rates above 64 MS/s. This can be useful for reducing USB bandwidth at lower rates.|
 
 **Example Stream Arguments String:** force_8bit=true
 
