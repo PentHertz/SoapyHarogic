@@ -16,7 +16,7 @@ find_path(HTRA_INCLUDE_DIR
 
 find_library(HTRA_LIBRARY
     NAMES htraapi libhtraapi
-    HINTS /opt/htraapi/lib/x86_64 /opt/htraapi/lib
+    HINTS /opt/htraapi/lib/x86_64 /opt/htraapi/lib/aarch64 /opt/htraapi/lib/armv7 /opt/htraapi/lib/aarch64_gcc7.5 /opt/htraapi/lib/x86_64_gcc5.4 /opt/htraapi/lib
     PATHS /usr/local/lib /usr/lib
 )
 
