@@ -169,7 +169,7 @@ The Harogic device uses a multi-stage gain system controlled by three separate e
 |   |   |   |   |
 |---|---|---|---|
 |Gain Element|Type|Range|Description|
-|REF|Integer|-100 to 7 [dBm]|**Reference Level.** This is the primary gain control. It sets the target power level for the top of the ADC's range. **Lower this value for strong signals to prevent overflow.**|
+|REF|Integer|-100 to 7 [dBm]|**Reference Level.** This is the primary gain control. It sets the target power level for the top of the ADC's range. **Use a high value for strong signals to prevent overflow.**|
 |PREAMP|Boolean|On/Off|Toggles the front-end low-noise preamplifier. On (1.0) enables it for better sensitivity on weak signals. Off (0.0) disables it.|
 |IF_AGC|Boolean|On/Off|Toggles the Intermediate Frequency (IF) Automatic Gain Control.|
 
