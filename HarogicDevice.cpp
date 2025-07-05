@@ -138,6 +138,7 @@ int SoapyHarogic::activateStream(SoapySDR::Stream *, const int, const long long,
     _profile.EnableIFAGC = _if_agc;
     _profile.LOOptimization = _lo_mode;
 
+    SoapySDR_log(SOAPY_SDR_INFO, "[ SoapyHarogic by FlUxIuS @ Penthertz.com ]");
     SoapySDR_log(SOAPY_SDR_INFO, "--- Harogic Activating Stream with Settings ---");
     SoapySDR_logf(SOAPY_SDR_INFO, "  - Center Frequency: %.3f MHz", _profile.CenterFreq_Hz / 1e6);
     SoapySDR_logf(SOAPY_SDR_INFO, "  - Sample Rate:      %.3f MS/s", _sample_rate / 1e6);
