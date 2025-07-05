@@ -176,9 +176,10 @@ show_menu() {
     echo "  4) Set USB 3.0 IRQ Affinity"
     echo "  5) Disable DRM KMS Polling"
     echo "  -------------------------------------"
-    echo "  ${C_GREEN}a) Apply ALL Performance Tweaks${C_NC}"
-    echo "  ${C_YELLOW}r) Revert to Default Settings${C_NC}"
-    echo "  ${C_RED}q) Quit${C_NC}"
+    # <<< FIX WAS HERE: Added -e to the following three lines >>>
+    echo -e "  ${C_GREEN}a) Apply ALL Performance Tweaks${C_NC}"
+    echo -e "  ${C_YELLOW}r) Revert to Default Settings${C_NC}"
+    echo -e "  ${C_RED}q) Quit${C_NC}"
     echo -e "${C_BLUE}=========================================${C_NC}"
 }
 
