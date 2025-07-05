@@ -198,4 +198,5 @@ class SoapyHarogic : public SoapySDR::Device
         std::vector<double> _available_sample_rates;
         std::map<std::string, RxPort_TypeDef> _rx_ports;
         bool _force_8bit;
+        std::atomic<bool> _overflow_flag;
 };

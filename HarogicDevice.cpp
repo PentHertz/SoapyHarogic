@@ -34,7 +34,8 @@ SoapyHarogic::SoapyHarogic(const SoapySDR::Kwargs &args) :
     _preamp_mode(AutoOn),
     _if_agc(false),
     _lo_mode(LOOpt_Auto),
-    _force_8bit(false)
+    _force_8bit(false),
+    _overflow_flag(false)
 {
     if (args.count("serial")) _serial = args.at("serial");
 
@@ -234,8 +235,18 @@ int SoapyHarogic::readStream(SoapySDR::Stream *, void *const *buffs, const size_
     if (!_rx_thread_running && _ring_buffer.size() < numElems) {
         return SOAPY_SDR_STREAM_ERROR;
     }
-    size_t num_read = _ring_buffer.read((std::complex<float>*)buffs[0], numElems);
+    
+    // Default flags to 0
     flags = 0;
+    
+    // Check for an overflow condition reported by the RX thread
+    if (_overflow_flag.exchange(false)) {
+        // Use END_BURST to signal a discontinuity like an overflow
+        flags |= SOAPY_SDR_END_BURST; // <<< FIX IS HERE
+        SoapySDR_log(SOAPY_SDR_SSI, "D"); // Log 'D' for Dropped/Distorted packet
+    }
+
+    size_t num_read = _ring_buffer.read((std::complex<float>*)buffs[0], numElems);
     return num_read;
 }
 
@@ -244,19 +255,32 @@ void SoapyHarogic::_rx_thread() {
     std::vector<std::complex<float>> temp_buf;
     if (_mtu > 0) temp_buf.resize(_mtu);
     IQStream_TypeDef iqs;
+    
     while (_rx_thread_running) {
         int ret = IQS_GetIQStream_PM1(&_dev_handle, &iqs);
+        
         if (ret < 0) {
-            if (ret == APIRETVAL_WARNING_BusTimeOut) { SoapySDR_log(SOAPY_SDR_SSI, "T"); continue; }
+            if (ret == APIRETVAL_WARNING_BusTimeOut) {
+                SoapySDR_log(SOAPY_SDR_SSI, "T"); // Timeout
+                continue;
+            } 
+            else if (ret == APIRETVAL_WARNING_IFOverflow) {
+                _overflow_flag = true; // Set the flag for readStream
+                // We don't need to log here, readStream will log 'D'
+                // This is a WARNING, so we CONTINUE streaming.
+                continue;
+            }
             else { 
-                SoapySDR_logf(SOAPY_SDR_ERROR, "Streaming error: %d. Worker thread stopping.", ret);
+                SoapySDR_logf(SOAPY_SDR_ERROR, "Fatal streaming error: %d. Worker thread stopping.", ret);
                 _rx_thread_running = false; 
                 break; 
             }
         }
+        
         uint32_t packetSamples = iqs.IQS_StreamInfo.PacketSamples;
         if (packetSamples == 0 || iqs.AlternIQStream == nullptr) continue;
         if (temp_buf.size() != packetSamples) temp_buf.resize(packetSamples);
+        
         if (_samps_int8) {
             int8_t* in = (int8_t*)iqs.AlternIQStream;
             for(size_t i = 0; i < packetSamples; ++i) temp_buf[i] = std::complex<float>(in[2*i] / 127.0f, in[2*i+1] / 127.0f);
@@ -264,11 +288,15 @@ void SoapyHarogic::_rx_thread() {
             int16_t* in = (int16_t*)iqs.AlternIQStream;
             for(size_t i = 0; i < packetSamples; ++i) temp_buf[i] = std::complex<float>(in[2*i] / 32767.0f, in[2*i+1] / 32767.0f);
         }
+        
         std::unique_lock<std::mutex> lock(_buffer_mutex);
-        if (!_ring_buffer.write(temp_buf.data(), packetSamples)) SoapySDR_log(SOAPY_SDR_SSI, "O");
+        if (!_ring_buffer.write(temp_buf.data(), packetSamples)) {
+            SoapySDR_log(SOAPY_SDR_SSI, "O"); // Ring buffer overflow
+        }
         lock.unlock();
         _buffer_cv.notify_one();
     }
+    
     _buffer_cv.notify_all();
     SoapySDR_log(SOAPY_SDR_INFO, "RX worker thread finished.");
 }
