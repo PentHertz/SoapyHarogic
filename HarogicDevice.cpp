@@ -106,8 +106,15 @@ SoapySDR::Kwargs SoapyHarogic::getHardwareInfo() const {
 size_t SoapyHarogic::getNumChannels(const int dir) const { return (dir == SOAPY_SDR_RX) ? 1 : 0; }
 std::vector<std::string> SoapyHarogic::getStreamFormats(const int, const size_t) const { return {SOAPY_SDR_CF32}; }
 std::string SoapyHarogic::getNativeStreamFormat(const int, const size_t, double &fullScale) const {
-    if (_sample_rate > RESOLTRIG) { fullScale = 128.0; return SOAPY_SDR_CS8; }
-    fullScale = 32768.0; return SOAPY_SDR_CS16;
+    bool use_cs8 = (_sample_rate > RESOLTRIG) || _force_8bit;
+    
+    if (use_cs8) {
+        fullScale = 128.0;
+        return SOAPY_SDR_CS8;
+    } else {
+        fullScale = 32768.0;
+        return SOAPY_SDR_CS16;
+    }
 }
 
 SoapySDR::ArgInfoList SoapyHarogic::getStreamArgsInfo(const int, const size_t) const {
@@ -129,17 +136,15 @@ SoapySDR::Stream *SoapyHarogic::setupStream(const int direction, const std::stri
     if (direction != SOAPY_SDR_RX) throw std::runtime_error("Harogic driver only supports RX");
     if (format != SOAPY_SDR_CF32) throw std::runtime_error("Please request CF32 format.");
 
-    // Check if the user wants to force 8-bit mode
     if (args.count("force_8bit")) {
         _force_8bit = (args.at("force_8bit") == "true");
+        if (_force_8bit) {
+            SoapySDR_log(SOAPY_SDR_INFO, "User has forced 8-bit sample mode.");
+        }
     }
 
     // Update the logic: use 8-bit if the rate is high OR if forced by the user
     _samps_int8 = (_sample_rate > RESOLTRIG) || _force_8bit;
-
-    if (_force_8bit) {
-        SoapySDR_log(SOAPY_SDR_INFO, "User has forced 8-bit sample mode.");
-    }
 
     return (SoapySDR::Stream *)this;
 }
@@ -155,6 +160,7 @@ size_t SoapyHarogic::getStreamMTU(SoapySDR::Stream *) const { return _mtu; }
 int SoapyHarogic::activateStream(SoapySDR::Stream *, const int, const long long, const size_t) {
     std::lock_guard<std::mutex> lock(_device_mutex);
     if (_rx_thread_running) return 0;
+    _samps_int8 = (_sample_rate > RESOLTRIG) || _force_8bit;
     BootProfile_TypeDef bprofile = {};
     bprofile.PhysicalInterface = PhysicalInterface_TypeDef::USB;
     bprofile.DevicePowerSupply = DevicePowerSupply_TypeDef::USBPortAndPowerPort;
