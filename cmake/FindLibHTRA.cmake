@@ -44,6 +44,11 @@ find_library(
         ${CMAKE_CURRENT_SOURCE_DIR}/lib
         /opt/htraapi/lib
         /opt/htraapi/lib64
+	/opt/htraapi/lib/x86_64
+	/opt/htraapi/lib/aarch64
+	/opt/htraapi/lib/armv7
+	/opt/htraapi/lib/aarch64_gcc7.5
+	/opt/htraapi/lib/x86_64_gcc5.4
     PATHS /usr/local/lib
           /usr/lib
           /opt/htra/lib

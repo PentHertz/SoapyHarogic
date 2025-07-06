@@ -1,57 +1,45 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.8) # Bumping version for modern CMake features
 project(SoapyHarogic CXX)
 
-# Test if we can find SoapySDR and HTRA
-find_package(SoapySDR "0.4.0" NO_MODULE REQUIRED)
-if(NOT SoapySDR_FOUND)
-    message(FATAL_ERROR "SoapySDR development files not found")
-endif()
+# Add the local 'cmake' directory to the search path for modules
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# Manual search for HTRA library
-find_path(HTRA_INCLUDE_DIR
-    NAMES HTRA_API.h htra_api.h
-    HINTS /opt/htraapi/inc
-    PATHS /usr/local/include /usr/include
+# Find SoapySDR using its own config file
+find_package(SoapySDR "0.8" REQUIRED)
+message(STATUS "Found SoapySDR: ${SoapySDR_VERSION} - Includes: ${SoapySDR_INCLUDE_DIRS}, Libs: ${SoapySDR_LIBRARIES}")
+
+# Find the Harogic HTRA library using our custom Find module
+find_package(LibHTRA REQUIRED)
+message(STATUS "Found LibHTRA: ${LibHTRA_VERSION} - Includes: ${LibHTRA_INCLUDE_DIRS}, Libs: ${LibHTRA_LIBRARIES}")
+
+# Define the source files for the module
+# This is cleaner than checking for file existence
+set(SOURCES
+    HarogicDevice.cpp
+    # SoapyHarogic.cpp # Add this back if you create the file
 )
 
-find_library(HTRA_LIBRARY
-    NAMES htraapi libhtraapi
-    HINTS /opt/htraapi/lib/x86_64 /opt/htraapi/lib/aarch64 /opt/htraapi/lib/armv7 /opt/htraapi/lib/aarch64_gcc7.5 /opt/htraapi/lib/x86_64_gcc5.4 /opt/htraapi/lib
-    PATHS /usr/local/lib /usr/lib
-)
-
-if(HTRA_INCLUDE_DIR AND HTRA_LIBRARY)
-    message(STATUS "Found HTRA include: ${HTRA_INCLUDE_DIR}")
-    message(STATUS "Found HTRA library: ${HTRA_LIBRARY}")
-else()
-    message(FATAL_ERROR "HTRA not found")
-endif()
-
-# Check for source files
-set(SOURCES "")
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/HarogicDevice.cpp)
-    list(APPEND SOURCES HarogicDevice.cpp)
-    message(STATUS "Found HarogicDevice.cpp")
-endif()
-
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/SoapyHarogic.cpp)
-    list(APPEND SOURCES SoapyHarogic.cpp)
-    message(STATUS "Found SoapyHarogic.cpp")
-endif()
-
-if(NOT SOURCES)
-	message(FATAL_ERROR "No source files found! Expected HarogicDevice.cpp or SoapyHarogic.cpp")
-endif()
-
-# Create the module
+# Use the SoapySDR utility to create the loadable module
+# This handles all the library type, naming, and installation details
 SOAPY_SDR_MODULE_UTIL(
-	TARGET HarogicSupport
+    TARGET HarogicSupport
     SOURCES ${SOURCES}
-    LIBRARIES ${HTRA_LIBRARY}
+    LIBRARIES ${LibHTRA_LIBRARIES}
 )
 
-target_include_directories(HarogicSupport PRIVATE ${HTRA_INCLUDE_DIR})
+# Add the necessary include directories to the target
+# Using INTERFACE from find_package targets is the modern way, but this is also correct.
+target_include_directories(HarogicSupport PRIVATE
+    ${SoapySDR_INCLUDE_DIRS}
+    ${LibHTRA_INCLUDE_DIRS}
+)
 
-message(STATUS "Configuration successful!")
-message(STATUS "Sources: ${SOURCES}")
-message(STATUS "Target: HarogicSupport")
+# Link the libraries
+# This is often handled by SOAPY_SDR_MODULE_UTIL, but being explicit is safe.
+target_link_libraries(HarogicSupport PRIVATE
+    ${SoapySDR_LIBRARIES}
+    ${LibHTRA_LIBRARIES}
+)
+
+message(STATUS "Configuration successful! Target 'HarogicSupport' will be built.")
+message(STATUS "Final install path will be: ${SoapySDR_MODULE_INSTALL_DIR}")
