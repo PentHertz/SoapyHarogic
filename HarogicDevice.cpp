@@ -29,7 +29,7 @@ SoapyHarogic::SoapyHarogic(const SoapySDR::Kwargs &args) :
     _ring_buffer(RING_BUFFER_SIZE),
     _sample_rate(0.0),
     _center_freq(100e6),
-    _ref_level(-40),
+    _ref_level(-10),
     _gain_strategy(LowNoisePreferred),
     _preamp_mode(AutoOn),
     _if_agc(false),
