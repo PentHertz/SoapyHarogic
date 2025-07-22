@@ -34,56 +34,58 @@ On a Debian/Ubuntu-based system, you can install the dependencies with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential cmake libsoapysdr-dev
+sudo apt-get install build-essential cmake libsoapysdr-dev soapysdr-tools
 ```
 
 🔧 **Important**: Calibration data must be placed in `/usr/bin/CalFile` directory in order to work.
 
 ## 🚀 Installation
 
-### 1. 🏗️ Build the Module
+### 1. 🔨 Install the SDK
+
+To install the SDK, you can take the `Linux_Example/Install_HTRA_SDK` path of your USB stick provided by Harogic, or you can use the [unofficial GitHub repository](https://github.com/PentHertz/rfswift_harogic_install/releases) and download the `Install_HTRA_SDK.zip` you will unzip.
+
+Then enterring in the `Install_HTRA_SDK` folder you can install everything as follows:
+
+```bash
+chmod +x install_htraapi_lib.sh
+./install_htraapi_lib.sh
+```
+
+If you have installed Soapy library and the SDK, you are now ready to compile the SoapyHarogic module.
+
+### 2. 🏗️ Build the Module
 
 Clone the repository and build the module using CMake:
 
 ```bash
-git clone https://github.com/your-username/SoapyHarogic.git
+git clone https://github.com/PentHertz/SoapyHarogic.git
 cd SoapyHarogic
 mkdir build
 cd build
 cmake ..
-make
+make && make install
 ```
 
-### 2. 📥 Install the Module
+This will typically build and install `libsoapyharogic.so` to `/usr/local/lib/SoapySDR/modules0.8/`. 📂
 
-Install the compiled module to a system-wide SoapySDR path:
+### 3. 🎯 Calibration files
+
+Calibration file `CalFile` directory must be place in `/usr/bin` or at least you need to make a symlink as `/usr/bin/CalFile` pointing to that directory:
 
 ```bash
-sudo make install
+$ ls /usr/bin/CalFile 
+010_ff00aa00_ifacal.txt  022_ff00aa00_rfacal.txt  056_ff00aa00_rfacal.txt
+010_ff00aa00_rfacal.txt  023_ff00aa00_ifacal.txt  057_ff00aa00_ifacal.txt
+011_ff00aa00_ifacal.txt  023_ff00aa00_rfacal.txt  057_ff00aa00_iqcal.txt
+011_ff00aa00_rfacal.txt  054_ff00aa00_ifacal.txt  057_ff00aa00_rfacal.txt
+012_ff00aa00_ifacal.txt  054_ff00aa00_iqcal.txt   057_ff00aa00_txlcal.txt
+012_ff00aa00_rfacal.txt  054_ff00aa00_rfacal.txt  091_ff00aa00_ifacal.txt
+013_ff00aa00_ifacal.txt  054_ff00aa00_txlcal.txt  091_ff00aa00_rfacal.txt
+013_ff00aa00_rfacal.txt  056_ff00aa00_ifacal.txt
+022_ff00aa00_ifacal.txt  056_ff00aa00_iqcal.txt
+
 ```
-
-This will typically copy `libsoapyharogic.so` to `/usr/local/lib/SoapySDR/modules0.8/`. 📂
-
-### 3. 🔐 USB Device Permissions (udev rule)
-
-For non-root users to access the device, you must install a udev rule. 👤
-
-1. 🔍 Find your device's Vendor and Product ID by running `lsusb`. Look for your Harogic device in the list.
-2. 📝 Create a new udev rule file. A pre-made rule is included in this repository (99-harogic.rules). Copy it to the system directory:
-  
-  ```bash
-  sudo cp ../99-harogic.rules /etc/udev/rules.d/
-  ```
-    
-  💡 (If you don't use the provided file, make sure your custom rule looks like this, replacing the IDs with your device's actual IDs: `SUBSYSTEM=="usb", ATTRS{idVendor}=="1234", ATTRS{idProduct}=="5678", MODE="0666"`)
-    
-3. 🔄 Reload the udev rules and trigger them:
-    ```bash
-    sudo udevadm control --reload-rules
-    sudo udevadm trigger
-    ```
-    
-4. 🔌 Unplug and re-plug your Harogic device for the new rule to take effect.
 
 ### 4. ✅ Verify Installation
 
