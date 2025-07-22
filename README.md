@@ -37,6 +37,8 @@ sudo apt-get update
 sudo apt-get install build-essential cmake libsoapysdr-dev soapysdr-tools
 ```
 
+If you have another distribution, you can follow [the steps described here for Soapy installation](https://github.com/pothosware/PothosCore/wiki/BuildGuide).
+
 🔧 **Important**: Calibration data must be placed in `/usr/bin/CalFile` directory in order to work.
 
 ## 🚀 Installation
