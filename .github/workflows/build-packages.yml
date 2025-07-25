@@ -104,58 +104,95 @@ jobs:
             echo "Installing Harogic HTRA SDK..."
             ./install_htraapi_lib.sh
             
-            # Verify installation
-            if [ ! -f "/usr/local/lib/libhtra_api.so" ] && [ ! -f "/opt/htraapi/lib/libhtra_api.so" ]; then
-                echo "Warning: libhtra_api.so not found in expected locations"
-                echo "Checking for SDK files..."
-                find /opt /usr/local -name "*htra*" -o -name "*HTRA*" 2>/dev/null || true
+            # Verify installation and check architecture-specific libraries
+            if [ ! -d "/opt/htraapi" ]; then
+                echo "Error: HTRA API installation failed"
+                exit 1
             fi
             
-            if [ ! -f "/usr/local/include/htra_api.h" ] && [ ! -f "/opt/htraapi/include/htra_api.h" ]; then
-                echo "Warning: htra_api.h not found in expected locations"
-                echo "Checking for header files..."
-                find /opt /usr/local -name "*.h" | grep -i htra 2>/dev/null || true
-            fi
+            echo "HTRA API installation successful. Available architectures:"
+            ls -la /opt/htraapi/lib/ || true
             
-            # Update library path if SDK installed in /opt/htraapi
-            if [ -d "/opt/htraapi" ]; then
-                echo "/opt/htraapi/lib" > /etc/ld.so.conf.d/htraapi.conf
-                ldconfig
-                
-                # Add to PKG_CONFIG_PATH if needed
-                export PKG_CONFIG_PATH="/opt/htraapi/lib/pkgconfig:$PKG_CONFIG_PATH"
-                
-                # Add include path for cmake
-                export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+            # Check for architecture-specific libraries
+            for arch_dir in x86_64 aarch64 armv7 aarch64_gcc7.5 x86_64_gcc5.4; do
+                if [ -d "/opt/htraapi/lib/${arch_dir}" ]; then
+                    echo "Found ${arch_dir} libraries:"
+                    ls -la "/opt/htraapi/lib/${arch_dir}/libhtraapi.so*" 2>/dev/null || echo "  No libhtraapi.so found"
+                fi
+            done
+            
+            # Check header files
+            if [ -f "/opt/htraapi/inc/htra_api.h" ]; then
+                echo "Found HTRA API header at: /opt/htraapi/inc/htra_api.h"
+            else
+                echo "Warning: HTRA API header not found"
+                find /opt -name "htra_api.h" 2>/dev/null || true
             fi
             
             # Build the project
             cd /workspace/build
             
-            # Set up build environment with proper paths
-            if [ -d "/opt/htraapi" ]; then
-                export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
-                export PKG_CONFIG_PATH="/opt/htraapi/lib/pkgconfig:$PKG_CONFIG_PATH"
-                export LD_LIBRARY_PATH="/opt/htraapi/lib:$LD_LIBRARY_PATH"
+            # Determine the correct architecture-specific library path
+            ARCH_NAME=""
+            case "${{ matrix.arch }}" in
+                "amd64")
+                    ARCH_NAME="x86_64"
+                    ;;
+                "arm64")
+                    ARCH_NAME="aarch64"
+                    ;;
+            esac
+            
+            # Set up build environment with proper architecture-specific paths
+            if [ -d "/opt/htraapi" ] && [ -n "$ARCH_NAME" ]; then
+                HTRA_LIB_PATH="/opt/htraapi/lib/${ARCH_NAME}"
+                HTRA_INCLUDE_PATH="/opt/htraapi/inc"
                 
-                cmake -DCMAKE_BUILD_TYPE=Release \
-                      -DCMAKE_INSTALL_PREFIX=/usr/local \
-                      -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
-                      -DCMAKE_PREFIX_PATH="/opt/htraapi" \
-                      -DHTRA_INCLUDE_DIR="/opt/htraapi/include" \
-                      -DHTRA_LIBRARY="/opt/htraapi/lib/libhtra_api.so" \
-                      ..
+                # Verify the correct library exists
+                if [ -f "${HTRA_LIB_PATH}/libhtraapi.so" ]; then
+                    echo "Found HTRA library for ${ARCH_NAME} at: ${HTRA_LIB_PATH}/libhtraapi.so"
+                    
+                    export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+                    export LD_LIBRARY_PATH="${HTRA_LIB_PATH}:$LD_LIBRARY_PATH"
+                    
+                    cmake -DCMAKE_BUILD_TYPE=Release \
+                          -DCMAKE_INSTALL_PREFIX=/usr/local \
+                          -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
+                          -DCMAKE_PREFIX_PATH="/opt/htraapi" \
+                          -DHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
+                          -DHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
+                          ..
+                else
+                    echo "Warning: HTRA library not found for ${ARCH_NAME} at ${HTRA_LIB_PATH}"
+                    echo "Available libraries:"
+                    find /opt/htraapi/lib -name "libhtraapi.so" 2>/dev/null || true
+                    exit 1
+                fi
             else
-                cmake -DCMAKE_BUILD_TYPE=Release \
-                      -DCMAKE_INSTALL_PREFIX=/usr/local \
-                      -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
-                      ..
+                echo "Error: HTRA API not found or architecture not supported"
+                exit 1
             fi
             
             make -j$(nproc)
             
             # Install to temporary directory for packaging
             DESTDIR=/workspace/debian-package make install
+            
+            # Copy the architecture-specific HTRA library to the package
+            # This ensures the correct library is included in the .deb package
+            if [ -n "$ARCH_NAME" ] && [ -f "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so" ]; then
+                echo "Including HTRA library for ${ARCH_NAME} in package..."
+                mkdir -p /workspace/debian-package/usr/local/lib
+                cp "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so"* /workspace/debian-package/usr/local/lib/ || true
+                
+                # Also copy required dependencies if they exist
+                if [ -f "/opt/htraapi/lib/${ARCH_NAME}/libusb-1.0.so" ]; then
+                    cp "/opt/htraapi/lib/${ARCH_NAME}/libusb-1.0.so"* /workspace/debian-package/usr/local/lib/ || true
+                fi
+                if [ -f "/opt/htraapi/lib/${ARCH_NAME}/libgomp.so" ]; then
+                    cp "/opt/htraapi/lib/${ARCH_NAME}/libgomp.so"* /workspace/debian-package/usr/local/lib/ || true
+                fi
+            fi
             
             # Create debian control file
             cat > /workspace/debian-package/DEBIAN/control << EOF
@@ -164,7 +201,7 @@ jobs:
             Section: electronics
             Priority: optional
             Architecture: ${{ matrix.arch }}
-            Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1
+            Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
             Maintainer: ${{ env.MAINTAINER }}
             Description: ${{ env.DESCRIPTION }}
              This package provides a SoapySDR plugin that allows software supporting
@@ -173,6 +210,9 @@ jobs:
              .
              Features include auto-discovery of connected devices, IQ streaming support,
              configurable sample rates, RF frequency control, and comprehensive gain control.
+             .
+             This package includes the architecture-specific Harogic HTRA API library
+             for ${{ matrix.arch }} systems.
             Homepage: ${{ env.HOMEPAGE }}
             EOF
             
@@ -237,7 +277,7 @@ jobs:
             Source: https://github.com/PentHertz/SoapyHarogic
             
             Files: *
-            Copyright: 2024 Sébastien Dudek / penthertz.com
+            Copyright: 2025 Sébastien Dudek / penthertz.com
             License: LGPL-2.1
              This library is free software; you can redistribute it and/or
              modify it under the terms of the GNU Lesser General Public
@@ -359,14 +399,6 @@ jobs:
         echo "sudo apt-get install -f" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Note:** You will need to install the Harogic HTRA SDK separately if not already installed:" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo "# Download and install the Harogic HTRA SDK:" >> $GITHUB_STEP_SUMMARY
-        echo "wget https://github.com/PentHertz/rfswift_harogic_install/releases/download/0.55.61/Install_HTRA_SDK.zip" >> $GITHUB_STEP_SUMMARY
-        echo "unzip Install_HTRA_SDK.zip" >> $GITHUB_STEP_SUMMARY
-        echo "cd Install_HTRA_SDK" >> $GITHUB_STEP_SUMMARY
-        echo "chmod +x install_htraapi_lib.sh" >> $GITHUB_STEP_SUMMARY
-        echo "sudo ./install_htraapi_lib.sh" >> $GITHUB_STEP_SUMMARY
+        echo "**Note:** The packages now include the Harogic HTRA API library, so no separate SDK installation is required!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "# Also place calibration files in /usr/bin/CalFile" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "However, you still need to place calibration files in \`/usr/bin/CalFile\` for proper operation." >> $GITHUB_STEP_SUMMARY
