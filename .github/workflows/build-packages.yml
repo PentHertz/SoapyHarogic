@@ -163,11 +163,25 @@ jobs:
                         ln -sf libhtraapi.so.0.55.61 "${HTRA_LIB_PATH}/libhtraapi.so"
                     fi
                     
-                    # Set environment variables to prevent CMake from finding wrong architecture libraries
+                    # CRITICAL FIX: Temporarily hide other architecture libraries from CMake
+                    # This prevents CMake from finding and using the wrong architecture
+                    echo "Temporarily masking other architecture libraries..."
+                    for other_arch in x86_64 aarch64 armv7 aarch64_gcc7.5 x86_64_gcc5.4; do
+                        if [ "$other_arch" != "$ARCH_NAME" ] && [ -d "/opt/htraapi/lib/$other_arch" ]; then
+                            echo "Hiding $other_arch libraries during build..."
+                            mv "/opt/htraapi/lib/$other_arch" "/opt/htraapi/lib/${other_arch}.hidden"
+                        fi
+                    done
+                    
+                    # Set environment variables
                     export LD_LIBRARY_PATH="${HTRA_LIB_PATH}:$LD_LIBRARY_PATH"
                     export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+                    export PKG_CONFIG_PATH="${HTRA_LIB_PATH}/pkgconfig:$PKG_CONFIG_PATH"
                     
-                    # Force CMake to use the specific architecture library by setting CMAKE_FIND_ROOT_PATH
+                    # Add git safe directory to avoid the warning
+                    git config --global --add safe.directory /workspace || true
+                    
+                    # Run CMake with the correct library path
                     cmake -DCMAKE_BUILD_TYPE=Release \
                           -DCMAKE_INSTALL_PREFIX=/usr/local \
                           -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
@@ -177,6 +191,9 @@ jobs:
                           -DHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
                           -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
                           -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
+                          -DLibHTRA_ROOT="/opt/htraapi" \
+                          -DCMAKE_LIBRARY_PATH="${HTRA_LIB_PATH}" \
+                          -DCMAKE_INCLUDE_PATH="${HTRA_INCLUDE_PATH}" \
                           ..
                 else
                     echo "Error: HTRA versioned library not found for ${ARCH_NAME} at ${HTRA_LIB_PATH}"
@@ -194,6 +211,15 @@ jobs:
             fi
             
             make -j$(nproc)
+            
+            # Restore the hidden architecture directories after build
+            echo "Restoring hidden architecture libraries..."
+            for other_arch in x86_64 aarch64 armv7 aarch64_gcc7.5 x86_64_gcc5.4; do
+                if [ "$other_arch" != "$ARCH_NAME" ] && [ -d "/opt/htraapi/lib/${other_arch}.hidden" ]; then
+                    echo "Restoring $other_arch libraries..."
+                    mv "/opt/htraapi/lib/${other_arch}.hidden" "/opt/htraapi/lib/$other_arch"
+                fi
+            done
             
             # Install to temporary directory for packaging
             DESTDIR=/workspace/debian-package make install
