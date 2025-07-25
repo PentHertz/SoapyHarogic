@@ -43,6 +43,24 @@ If you have another distribution, you can follow [the steps described here for S
 
 ## 🚀 Installation
 
+### Quickest way - On Ubuntu
+
+Get the latest `deb` package depending on your architecture from this project in [releases](https://github.com/PentHertz/SoapyHarogic/releases) and install it with `dpkg` as follows (example with AMD64):
+
+```bash
+wget https://github.com/PentHertz/SoapyHarogic/releases/download/v1.0/soapyharogic_1.0_amd64.deb
+sudo dpkg -i soapyharogic_1.0_amd64.deb
+sudo apt install -f # installing missing dependencies
+```
+
+After copying the content of your `CalFile` directory provided by Harogic in `/usr/bin/CalFile` in your filesystem, we can install SoapySDR tools to detect our device, or even play with it now on GNU Radio.
+
+To install SoapySDR tools and GNU Radio
+```
+apt install soapysdr-tools
+apt install gnuradio
+```
+
 ### 1. 🔨 Install the SDK
 
 To install the SDK, you can take the `Linux_Example/Install_HTRA_SDK` path of your USB stick provided by Harogic, or you can use the [unofficial GitHub repository](https://github.com/PentHertz/rfswift_harogic_install/releases) and download the `Install_HTRA_SDK.zip` you will unzip.
