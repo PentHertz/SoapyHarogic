@@ -186,9 +186,15 @@ POSTINST_EOF
         sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" build-and-package.sh
         sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" build-and-package.sh
         sed -i "s/PACKAGE_NAME_PLACEHOLDER/${{ env.PACKAGE_NAME }}/g" build-and-package.sh
-        sed -i 's|MAINTAINER_PLACEHOLDER|${{ env.MAINTAINER }}|g' build-and-package.sh
-        sed -i 's|HOMEPAGE_PLACEHOLDER|${{ env.HOMEPAGE }}|g' build-and-package.sh
-        sed -i 's|DESCRIPTION_PLACEHOLDER|${{ env.DESCRIPTION }}|g' build-and-package.sh
+        
+        # Use environment variables for complex replacements
+        export MAINTAINER_VALUE="${{ env.MAINTAINER }}"
+        export HOMEPAGE_VALUE="${{ env.HOMEPAGE }}"
+        export DESCRIPTION_VALUE="${{ env.DESCRIPTION }}"
+        
+        sed -i "s|MAINTAINER_PLACEHOLDER|${MAINTAINER_VALUE}|g" build-and-package.sh
+        sed -i "s|HOMEPAGE_PLACEHOLDER|${HOMEPAGE_VALUE}|g" build-and-package.sh
+        sed -i "s|DESCRIPTION_PLACEHOLDER|${DESCRIPTION_VALUE}|g" build-and-package.sh
         
         chmod +x build-and-package.sh
 
