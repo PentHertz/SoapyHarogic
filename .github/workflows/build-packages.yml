@@ -70,11 +70,11 @@ jobs:
             
             # Create a debug info file
             mkdir -p /workspace/build-output
-            cat > /workspace/build-output/build-debug-${{ matrix.arch }}.txt << DEBUGEOF
-        Build failed for ${{ matrix.arch }} at step: $1
+            cat > /workspace/build-output/build-debug-ARCH_VAR.txt << DEBUGEOF
+        Build failed for ARCH_VAR at step: $1
         Date: $(date)
-        Platform: ${{ matrix.platform }}
-        Architecture: ${{ matrix.arch }}
+        Platform: PLATFORM_VAR
+        Architecture: ARCH_VAR
         
         Available SDK files:
         $(find /opt -name "*htra*" 2>/dev/null || echo "No HTRA files found")
@@ -93,9 +93,9 @@ jobs:
         }
         
         # Redirect all output to a log file
-        exec > >(tee /workspace/build-output/build-${{ matrix.arch }}.log) 2>&1
+        exec > >(tee /workspace/build-output/build-ARCH_VAR.log) 2>&1
         
-        echo "Starting build for ${{ matrix.arch }} at $(date)"
+        echo "Starting build for ARCH_VAR at $(date)"
         
         # Update package list and install dependencies
         echo "Installing dependencies..."
@@ -167,7 +167,7 @@ jobs:
         
         # Determine the correct architecture-specific library path
         ARCH_NAME=""
-        case "${{ matrix.arch }}" in
+        case "ARCH_VAR" in
             "amd64")
                 ARCH_NAME="x86_64"
                 ;;
@@ -176,7 +176,7 @@ jobs:
                 ;;
         esac
         
-        echo "Building for architecture: ${{ matrix.arch }} (${ARCH_NAME})"
+        echo "Building for architecture: ARCH_VAR (${ARCH_NAME})"
         
         # Set up build environment with proper architecture-specific paths
         if [ -d "/opt/htraapi" ] && [ -n "$ARCH_NAME" ]; then
@@ -317,8 +317,8 @@ Homepage: https://github.com/PentHertz/SoapyHarogic
 CONTROL_EOF
 
         # Replace placeholders in control file
-        sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" /workspace/debian-package/DEBIAN/control
-        sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" /workspace/debian-package/DEBIAN/control
+        sed -i "s/VERSION_PLACEHOLDER/VERSION_VAR/g" /workspace/debian-package/DEBIAN/control
+        sed -i "s/ARCH_PLACEHOLDER/ARCH_VAR/g" /workspace/debian-package/DEBIAN/control
         
         # Create postinst script
         cat > /workspace/debian-package/DEBIAN/postinst << "POSTINST_EOF"
@@ -411,6 +411,185 @@ soapyharogic (VERSION_PLACEHOLDER) unstable; urgency=medium
 CHANGELOG_EOF
 
         # Replace placeholders in changelog
+        sed -i "s/VERSION_PLACEHOLDER/VERSION_VAR/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        sed -i "s/ARCH_PLACEHOLDER/ARCH_VAR/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        sed -i "s/DATE_PLACEHOLDER/$(date -R)/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        
+        # Compress changelog
+        gzip -9 /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        
+        # Fix permissions
+        find /workspace/debian-package -type f -exec chmod 644 {} \;
+        find /workspace/debian-package -type d -exec chmod 755 {} \;
+        chmod 755 /workspace/debian-package/DEBIAN/postinst
+        chmod 755 /workspace/debian-package/DEBIAN/prerm
+        
+        # Build the .deb package
+        cd /workspace
+        echo "Building .deb package..."
+        FINAL_FILENAME="soapyharogic_VERSION_VAR_ARCH_VAR.deb"
+        fakeroot dpkg-deb --build debian-package "build-output/${FINAL_FILENAME}" || handle_error "package creation"
+        
+        # Verify the package
+        echo "Package contents:"
+        dpkg-deb -c "build-output/${FINAL_FILENAME}"
+        
+        echo "Package info:"
+        dpkg-deb -I "build-output/${FINAL_FILENAME}"
+        
+        # Run lintian checks (non-fatal)
+        lintian "build-output/${FINAL_FILENAME}" || echo "Lintian warnings (non-fatal)"
+        
+        echo "Build completed successfully for ARCH_VAR"
+        BUILD_SCRIPT_EOF
+        
+        # Replace placeholders in the script with actual values
+        sed -i "s/VERSION_VAR/${{ steps.version.outputs.VERSION }}/g" build-script.sh
+        sed -i "s/ARCH_VAR/${{ matrix.arch }}/g" build-script.sh  
+        sed -i "s/PLATFORM_VAR/${{ matrix.platform }}/g" build-script.sh
+        
+        chmod +x build-script.sh ] && [ -f "/opt/htraapi/lib/aarch64_gcc7.5/libarmral.so" ]; then
+                cp "/opt/htraapi/lib/aarch64_gcc7.5/libarmral.so" /workspace/debian-package/usr/local/lib/
+                echo "Included architecture-specific library: libarmral.so"
+            fi
+            
+            if [ "$ARCH_NAME" = "x86_64" ]; then
+                for lib in libiomp5.so libmkl.so; do
+                    if [ -f "/opt/htraapi/lib/x86_64_gcc5.4/${lib}" ]; then
+                        cp "/opt/htraapi/lib/x86_64_gcc5.4/${lib}" /workspace/debian-package/usr/local/lib/
+                        echo "Included x86_64-specific library: ${lib}"
+                    fi
+                done
+            fi
+        fi
+        
+        # Copy udev rules and config files to the package
+        mkdir -p /workspace/debian-package/etc/udev/rules.d
+        mkdir -p /workspace/debian-package/etc
+        if [ -f "/opt/htraapi/configs/htra-cyusb.rules" ]; then
+            cp "/opt/htraapi/configs/htra-cyusb.rules" /workspace/debian-package/etc/udev/rules.d/
+        fi
+        if [ -f "/opt/htraapi/configs/htrausb.conf" ]; then
+            cp "/opt/htraapi/configs/htrausb.conf" /workspace/debian-package/etc/
+        fi
+
+        # Create debian control file
+        cat > /workspace/debian-package/DEBIAN/control << "CONTROL_EOF"
+Package: soapyharogic
+Version: VERSION_PLACEHOLDER
+Section: electronics
+Priority: optional
+Architecture: ARCH_PLACEHOLDER
+Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
+Maintainer: Sébastien Dudek <maintainer@penthertz.com>
+Description: SoapySDR plugin for Harogic HTRA series spectrum analysis devices
+ This package provides a SoapySDR plugin that allows software supporting
+ the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
+ Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
+ .
+ Features include auto-discovery of connected devices, IQ streaming support,
+ configurable sample rates, RF frequency control, and comprehensive gain control.
+ .
+ This package includes the architecture-specific Harogic HTRA API library
+ for ARCH_PLACEHOLDER systems.
+Homepage: https://github.com/PentHertz/SoapyHarogic
+CONTROL_EOF
+
+        # Replace placeholders in control file
+        sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" /workspace/debian-package/DEBIAN/control
+        sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" /workspace/debian-package/DEBIAN/control
+        
+        # Create postinst script
+        cat > /workspace/debian-package/DEBIAN/postinst << "POSTINST_EOF"
+#!/bin/bash
+set -e
+
+# Update library cache
+ldconfig
+
+# Refresh SoapySDR module cache
+if command -v SoapySDRUtil >/dev/null 2>&1; then
+    echo "Refreshing SoapySDR module cache..."
+    SoapySDRUtil --info >/dev/null 2>&1 || true
+fi
+
+# Create CalFile directory if it does not exist
+if [ ! -d "/usr/bin/CalFile" ]; then
+    echo "Creating calibration file directory at /usr/bin/CalFile"
+    mkdir -p /usr/bin/CalFile
+    echo "Note: Place your Harogic calibration files in /usr/bin/CalFile"
+    echo "      Calibration files are typically found in the CalFile directory"
+    echo "      from your Harogic device USB stick or SDK installation."
+fi
+
+# Set up udev rules for Harogic devices (if available)
+if [ -f "/opt/htraapi/configs/htra-cyusb.rules" ]; then
+    cp /opt/htraapi/configs/htra-cyusb.rules /etc/udev/rules.d/ 2>/dev/null || true
+    udevadm control --reload-rules 2>/dev/null || true
+fi
+
+echo "SoapyHarogic installation completed successfully!"
+echo "The plugin includes the Harogic HTRA API library for this architecture."
+echo ""
+echo "To test the installation, run:"
+echo "  SoapySDRUtil --find=\"driver=harogic\""
+echo ""
+
+exit 0
+POSTINST_EOF
+        
+        # Create prerm script
+        cat > /workspace/debian-package/DEBIAN/prerm << "PRERM_EOF"
+#!/bin/bash
+set -e
+
+# Nothing special needed for removal
+exit 0
+PRERM_EOF
+        
+        # Make scripts executable
+        chmod 755 /workspace/debian-package/DEBIAN/postinst
+        chmod 755 /workspace/debian-package/DEBIAN/prerm
+        
+        # Create copyright file
+        cat > /workspace/debian-package/usr/share/doc/soapyharogic/copyright << "COPYRIGHT_EOF"
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: SoapyHarogic
+Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
+Source: https://github.com/PentHertz/SoapyHarogic
+
+Files: *
+Copyright: 2024 Sébastien Dudek / penthertz.com
+License: LGPL-2.1
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+ .
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
+COPYRIGHT_EOF
+        
+        # Create changelog
+        cat > /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian << "CHANGELOG_EOF"
+soapyharogic (VERSION_PLACEHOLDER) unstable; urgency=medium
+
+  * Automated build from GitHub Actions
+  * Built for ARCH_PLACEHOLDER architecture
+
+ -- Sébastien Dudek <maintainer@penthertz.com>  DATE_PLACEHOLDER
+CHANGELOG_EOF
+
+        # Replace placeholders in changelog
         sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         sed -i "s/DATE_PLACEHOLDER/$(date -R)/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
@@ -466,7 +645,7 @@ CHANGELOG_EOF
         if [ $BUILD_EXIT_CODE -eq 0 ]; then
           echo "Build succeeded for ${{ matrix.arch }}"
           # Verify the package was created
-          if [ ! -f "build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb" ]; then
+          if [ ! -f "build-output/soapyharogic_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb" ]; then
             echo "Warning: Package file not found despite successful build"
             echo "Available files in build-output:"
             ls -la build-output/ || echo "build-output directory empty"
@@ -518,7 +697,7 @@ CHANGELOG_EOF
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
+        name: soapyharogic-${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
         path: |
           build-output/*.deb
           build-output/*.log
@@ -557,8 +736,8 @@ CHANGELOG_EOF
         echo "|--------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
         
         for arch in amd64 arm64; do
-          if [ -d "artifacts/${{ env.PACKAGE_NAME }}-*-${arch}" ]; then
-            package_file=$(find artifacts/${{ env.PACKAGE_NAME }}-*-${arch} -name "*.deb" | head -1)
+          if [ -d "artifacts/soapyharogic-*-${arch}" ]; then
+            package_file=$(find artifacts/soapyharogic-*-${arch} -name "*.deb" | head -1)
             if [ -n "$package_file" ]; then
               package_name=$(basename "$package_file")
               echo "| ${arch} | ✅ Success | \`${package_name}\` |" >> $GITHUB_STEP_SUMMARY
@@ -577,10 +756,10 @@ CHANGELOG_EOF
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo "# Download the appropriate package for your architecture" >> $GITHUB_STEP_SUMMARY
         echo "# For x86_64 systems:" >> $GITHUB_STEP_SUMMARY
-        echo "sudo dpkg -i ${{ env.PACKAGE_NAME }}_*_amd64.deb" >> $GITHUB_STEP_SUMMARY
+        echo "sudo dpkg -i soapyharogic_*_amd64.deb" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "# For ARM64 systems:" >> $GITHUB_STEP_SUMMARY
-        echo "sudo dpkg -i ${{ env.PACKAGE_NAME }}_*_arm64.deb" >> $GITHUB_STEP_SUMMARY
+        echo "sudo dpkg -i soapyharogic_*_arm64.deb" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "# Install dependencies if needed:" >> $GITHUB_STEP_SUMMARY
         echo "sudo apt-get install -f" >> $GITHUB_STEP_SUMMARY
