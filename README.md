@@ -43,7 +43,7 @@ If you have another distribution, you can follow [the steps described here for S
 
 ## 🚀 Installation
 
-### Quickest way - On Ubuntu
+### Quickest way - On Debian/Ubuntu
 
 Get the latest `deb` package depending on your architecture from this project in [releases](https://github.com/PentHertz/SoapyHarogic/releases) and install it with `dpkg` as follows (example with AMD64):
 
