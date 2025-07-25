@@ -57,6 +57,59 @@ jobs:
     - name: Create build directory
       run: mkdir -p build-output
 
+    - name: Create package files
+      run: |
+        # Create control file
+        cat > control-template << 'CONTROL_TEMPLATE'
+        Package: ${{ env.PACKAGE_NAME }}
+        Version: ${{ steps.version.outputs.VERSION }}
+        Section: electronics
+        Priority: optional
+        Architecture: ${{ matrix.arch }}
+        Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
+        Maintainer: ${{ env.MAINTAINER }}
+        Description: ${{ env.DESCRIPTION }}
+         This package provides a SoapySDR plugin that allows software supporting
+         the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
+         Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
+         .
+         Features include auto-discovery of connected devices, IQ streaming support,
+         configurable sample rates, RF frequency control, and comprehensive gain control.
+         .
+         This package includes the architecture-specific Harogic HTRA API library
+         for ${{ matrix.arch }} systems.
+        Homepage: ${{ env.HOMEPAGE }}
+        CONTROL_TEMPLATE
+        
+        # Create postinst script
+        cat > postinst-template << 'POSTINST_TEMPLATE'
+        #!/bin/bash
+        set -e
+        ldconfig
+        if command -v SoapySDRUtil >/dev/null 2>&1; then
+            echo "Refreshing SoapySDR module cache..."
+            SoapySDRUtil --info >/dev/null 2>&1 || true
+        fi
+        if [ ! -d "/usr/bin/CalFile" ]; then
+            echo "Creating calibration file directory at /usr/bin/CalFile"
+            mkdir -p /usr/bin/CalFile
+            echo "Note: Place your Harogic calibration files in /usr/bin/CalFile"
+        fi
+        exit 0
+        POSTINST_TEMPLATE
+        
+        # Create copyright file
+        cat > copyright-template << 'COPYRIGHT_TEMPLATE'
+        Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+        Upstream-Name: SoapyHarogic
+        Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
+        Source: https://github.com/PentHertz/SoapyHarogic
+        
+        Files: *
+        Copyright: 2025 Sébastien Dudek / penthertz.com
+        License: LGPL-2.1
+        COPYRIGHT_TEMPLATE
+
     - name: Build in Docker container
       run: |
         docker run --rm --platform=${{ matrix.platform }} \
@@ -269,118 +322,23 @@ jobs:
                 cp "/opt/htraapi/configs/htrausb.conf" /workspace/debian-package/etc/
             fi
             
-            # Create debian control file
-            cat > /workspace/debian-package/DEBIAN/control << "CONTROL_EOF"
-Package: ${{ env.PACKAGE_NAME }}
-Version: ${{ steps.version.outputs.VERSION }}
-Section: electronics
-Priority: optional
-Architecture: ${{ matrix.arch }}
-Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-Maintainer: ${{ env.MAINTAINER }}
-Description: ${{ env.DESCRIPTION }}
- This package provides a SoapySDR plugin that allows software supporting
- the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
- Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
- .
- Features include auto-discovery of connected devices, IQ streaming support,
- configurable sample rates, RF frequency control, and comprehensive gain control.
- .
- This package includes the architecture-specific Harogic HTRA API library
- for ${{ matrix.arch }} systems.
-Homepage: ${{ env.HOMEPAGE }}
-CONTROL_EOF
+            # Copy pre-created package files
+            cp /workspace/control-template /workspace/debian-package/DEBIAN/control
+            cp /workspace/postinst-template /workspace/debian-package/DEBIAN/postinst
+            cp /workspace/copyright-template /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright
             
-            # Create postinst script
-            cat > /workspace/debian-package/DEBIAN/postinst << "POSTINST_EOF"
-#!/bin/bash
-set -e
-
-# Update library cache
-ldconfig
-
-# Refresh SoapySDR module cache
-if command -v SoapySDRUtil >/dev/null 2>&1; then
-    echo "Refreshing SoapySDR module cache..."
-    SoapySDRUtil --info >/dev/null 2>&1 || true
-fi
-
-# Create CalFile directory if it does not exist
-if [ ! -d "/usr/bin/CalFile" ]; then
-    echo "Creating calibration file directory at /usr/bin/CalFile"
-    mkdir -p /usr/bin/CalFile
-    echo "Note: Place your Harogic calibration files in /usr/bin/CalFile"
-    echo "      Calibration files are typically found in the CalFile directory"
-    echo "      from your Harogic device USB stick or SDK installation."
-fi
-
-# Check if Harogic SDK is installed
-if [ ! -f "/opt/htraapi/lib/libhtra_api.so" ] && [ ! -f "/usr/local/lib/libhtra_api.so" ]; then
-    echo ""
-    echo "WARNING: Harogic HTRA SDK not detected!"
-    echo "Please install the Harogic HTRA SDK before using this plugin."
-    echo "You can download it from:"
-    echo "https://github.com/PentHertz/rfswift_harogic_install/releases"
-    echo ""
-    echo "After downloading Install_HTRA_SDK.zip, extract and run:"
-    echo "  chmod +x install_htraapi_lib.sh"
-    echo "  sudo ./install_htraapi_lib.sh"
-    echo ""
-fi
-
-exit 0
-POSTINST_EOF
-            
-            # Create prerm script
-            cat > /workspace/debian-package/DEBIAN/prerm << "PRERM_EOF"
-#!/bin/bash
-set -e
-
-# Nothing special needed for removal
-exit 0
-PRERM_EOF
-            
-            # Make scripts executable
-            chmod 755 /workspace/debian-package/DEBIAN/postinst
-            chmod 755 /workspace/debian-package/DEBIAN/prerm
-            
-            # Create copyright file
-            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright << "COPYRIGHT_EOF"
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: SoapyHarogic
-Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
-Source: https://github.com/PentHertz/SoapyHarogic
-
-Files: *
-Copyright: 2025 Sébastien Dudek / penthertz.com
-License: LGPL-2.1
- This library is free software; you can redistribute it and/or
- modify it under the terms of the GNU Lesser General Public
- License as published by the Free Software Foundation; either
- version 2.1 of the License, or (at your option) any later version.
- .
- This library is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- Lesser General Public License for more details.
- .
- You should have received a copy of the GNU Lesser General Public
- License along with this library; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- .
- On Debian systems, the complete text of the GNU Lesser General Public
- License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
-COPYRIGHT_EOF
+            # Create simple prerm script
+            echo "#!/bin/bash" > /workspace/debian-package/DEBIAN/prerm
+            echo "set -e" >> /workspace/debian-package/DEBIAN/prerm
+            echo "exit 0" >> /workspace/debian-package/DEBIAN/prerm
             
             # Create changelog
-            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian << "CHANGELOG_EOF"
-${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium
-
-  * Automated build from GitHub Actions
-  * Built for ${{ matrix.arch }} architecture
-
- -- ${{ env.MAINTAINER }}  $(date -R)
-CHANGELOG_EOF
+            echo "${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium" > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            echo "" >> /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            echo "  * Automated build from GitHub Actions" >> /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            echo "  * Built for ${{ matrix.arch }} architecture" >> /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            echo "" >> /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            echo " -- ${{ env.MAINTAINER }}  $(date -R)" >> /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
             
             # Compress changelog
             gzip -9 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
