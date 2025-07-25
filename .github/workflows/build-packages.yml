@@ -228,31 +228,26 @@ jobs:
         #!/bin/bash
         set -e
         
-        cat > /workspace/debian-package/DEBIAN/control << "CONTROL_EOF"
-Package: soapyharogic
-Version: VERSION_PLACEHOLDER
-Section: electronics
-Priority: optional
-Architecture: ARCH_PLACEHOLDER
-Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-Maintainer: Sébastien Dudek <maintainer@penthertz.com>
-Description: SoapySDR plugin for Harogic HTRA series spectrum analysis devices
- This package provides a SoapySDR plugin that allows software supporting
- the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
- Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
- .
- Features include auto-discovery of connected devices, IQ streaming support,
- configurable sample rates, RF frequency control, and comprehensive gain control.
- .
- This package includes the architecture-specific Harogic HTRA API library
- for ARCH_PLACEHOLDER systems.
-Homepage: https://github.com/PentHertz/SoapyHarogic
-CONTROL_EOF
-
-        sed -i "s/VERSION_PLACEHOLDER/VERSION_VAR/g" /workspace/debian-package/DEBIAN/control
-        sed -i "s/ARCH_PLACEHOLDER/ARCH_VAR/g" /workspace/debian-package/DEBIAN/control
+        echo "Package: soapyharogic" > /workspace/debian-package/DEBIAN/control
+        echo "Version: VERSION_VAR" >> /workspace/debian-package/DEBIAN/control
+        echo "Section: electronics" >> /workspace/debian-package/DEBIAN/control
+        echo "Priority: optional" >> /workspace/debian-package/DEBIAN/control
+        echo "Architecture: ARCH_VAR" >> /workspace/debian-package/DEBIAN/control
+        echo "Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0" >> /workspace/debian-package/DEBIAN/control
+        echo "Maintainer: Sébastien Dudek <maintainer@penthertz.com>" >> /workspace/debian-package/DEBIAN/control
+        echo "Description: SoapySDR plugin for Harogic HTRA series spectrum analysis devices" >> /workspace/debian-package/DEBIAN/control
+        echo " This package provides a SoapySDR plugin that allows software supporting" >> /workspace/debian-package/DEBIAN/control
+        echo " the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use" >> /workspace/debian-package/DEBIAN/control
+        echo " Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers." >> /workspace/debian-package/DEBIAN/control
+        echo " ." >> /workspace/debian-package/DEBIAN/control
+        echo " Features include auto-discovery of connected devices, IQ streaming support," >> /workspace/debian-package/DEBIAN/control
+        echo " configurable sample rates, RF frequency control, and comprehensive gain control." >> /workspace/debian-package/DEBIAN/control
+        echo " ." >> /workspace/debian-package/DEBIAN/control
+        echo " This package includes the architecture-specific Harogic HTRA API library" >> /workspace/debian-package/DEBIAN/control
+        echo " for ARCH_VAR systems." >> /workspace/debian-package/DEBIAN/control
+        echo "Homepage: https://github.com/PentHertz/SoapyHarogic" >> /workspace/debian-package/DEBIAN/control
         
-        cat > /workspace/debian-package/DEBIAN/postinst << "POSTINST_EOF"
+        cat > /workspace/debian-package/DEBIAN/postinst << 'POSTINST_EOF'
 #!/bin/bash
 set -e
 ldconfig
@@ -269,7 +264,7 @@ echo "SoapyHarogic installation completed successfully!"
 exit 0
 POSTINST_EOF
         
-        cat > /workspace/debian-package/DEBIAN/prerm << "PRERM_EOF"
+        cat > /workspace/debian-package/DEBIAN/prerm << 'PRERM_EOF'
 #!/bin/bash
 set -e
 exit 0
@@ -278,29 +273,21 @@ PRERM_EOF
         chmod 755 /workspace/debian-package/DEBIAN/postinst
         chmod 755 /workspace/debian-package/DEBIAN/prerm
         
-        cat > /workspace/debian-package/usr/share/doc/soapyharogic/copyright << "COPYRIGHT_EOF"
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: SoapyHarogic
-Upstream-Contact: Sébastien Dudek <contact@penthertz.com>
-Source: https://github.com/PentHertz/SoapyHarogic
-
-Files: *
-Copyright: 2025 Sébastien Dudek / penthertz.com
-License: LGPL-2.1
-COPYRIGHT_EOF
+        echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/" > /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "Upstream-Name: SoapyHarogic" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "Upstream-Contact: Sébastien Dudek <contact@penthertz.com>" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "Source: https://github.com/PentHertz/SoapyHarogic" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "Files: *" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "Copyright: 2025 Sébastien Dudek / penthertz.com" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
+        echo "License: LGPL-2.1" >> /workspace/debian-package/usr/share/doc/soapyharogic/copyright
         
-        cat > /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian << "CHANGELOG_EOF"
-soapyharogic (VERSION_PLACEHOLDER) unstable; urgency=medium
-
-  * Automated build from GitHub Actions
-  * Built for ARCH_PLACEHOLDER architecture
-
- -- Sébastien Dudek <maintainer@penthertz.com>  DATE_PLACEHOLDER
-CHANGELOG_EOF
-
-        sed -i "s/VERSION_PLACEHOLDER/VERSION_VAR/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
-        sed -i "s/ARCH_PLACEHOLDER/ARCH_VAR/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
-        sed -i "s/DATE_PLACEHOLDER/$(date -R)/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo "soapyharogic (VERSION_VAR) unstable; urgency=medium" > /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo "" >> /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo "  * Automated build from GitHub Actions" >> /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo "  * Built for ARCH_VAR architecture" >> /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo "" >> /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        echo " -- Sébastien Dudek <maintainer@penthertz.com>  $(date -R)" >> /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         
         gzip -9 /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         
