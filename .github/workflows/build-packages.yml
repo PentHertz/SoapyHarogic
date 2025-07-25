@@ -102,7 +102,7 @@ jobs:
         cat > copyright-template << 'COPYRIGHT_TEMPLATE'
         Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
         Upstream-Name: SoapyHarogic
-        Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
+        Upstream-Contact: Sébastien Dudek <contact@penthertz.com>
         Source: https://github.com/PentHertz/SoapyHarogic
         
         Files: *
@@ -414,7 +414,7 @@ jobs:
         if-no-files-found: warn
 
     - name: Upload to release (if tag)
-      if: startsWith(github.ref, 'refs/tags/') && hashFiles('build-output/*.deb') != ''
+      if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
         files: build-output/*.deb
@@ -442,17 +442,30 @@ jobs:
         echo "| Architecture | Status | Package |" >> $GITHUB_STEP_SUMMARY
         echo "|--------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
         
+        # Debug: Show what artifacts we have
+        echo "DEBUG: Available artifact directories:"
+        ls -la artifacts/ || echo "No artifacts directory"
+        
         for arch in amd64 arm64; do
-          if [ -d "artifacts/${{ env.PACKAGE_NAME }}-*-${arch}" ]; then
-            package_file=$(find artifacts/${{ env.PACKAGE_NAME }}-*-${arch} -name "*.deb" | head -1)
-            if [ -n "$package_file" ]; then
-              package_name=$(basename "$package_file")
-              echo "| ${arch} | ✅ Success | \`${package_name}\` |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| ${arch} | ❌ Failed | - |" >> $GITHUB_STEP_SUMMARY
+          found_package=""
+          # Look for directories containing the architecture name
+          for dir in artifacts/*/; do
+            if [[ "$dir" == *"${arch}"* ]]; then
+              echo "DEBUG: Checking directory: $dir"
+              # Look for .deb files in this directory
+              deb_file=$(find "$dir" -name "*.deb" -type f | head -1)
+              if [ -n "$deb_file" ]; then
+                found_package=$(basename "$deb_file")
+                echo "DEBUG: Found package: $found_package"
+                break
+              fi
             fi
+          done
+          
+          if [ -n "$found_package" ]; then
+            echo "| ${arch} | ✅ Success | \`${found_package}\` |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| ${arch} | ❌ Failed | - |" >> $GITHUB_STEP_SUMMARY
+            echo "| ${arch} | ❌ Failed | No .deb file found |" >> $GITHUB_STEP_SUMMARY
           fi
         done
         
