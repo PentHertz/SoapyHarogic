@@ -51,133 +51,140 @@ jobs:
     - name: Create build directory
       run: mkdir -p build-output
 
-    - name: Create build-and-package script
-      run: |
-        cat > build-and-package.sh << 'BUILD_SCRIPT_EOF'
-        #!/bin/bash
-        set -e
-        
-        handle_error() {
-            echo "Build failed at step: $1"
-            exit 1
-        }
-        
-        exec > >(tee "/workspace/build-output/build-${{ matrix.arch }}.log") 2>&1
-        echo "Starting build for ${{ matrix.arch }} at $(date)"
-        
-        echo "--- 1. Installing dependencies ---"
-        apt-get update || handle_error "apt-get update"
-        apt-get install -y build-essential cmake pkg-config git wget curl libsoapysdr-dev soapysdr-tools dpkg-dev debhelper fakeroot lintian unzip || handle_error "dependency installation"
-
-        echo "--- 2. Creating package structure ---"
-        mkdir -p /workspace/build /workspace/debian-package/DEBIAN /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}
-
-        echo "--- 3. Downloading and installing Harogic HTRA SDK ---"
-        cd /tmp
-        wget https://github.com/PentHertz/rfswift_harogic_install/releases/download/0.55.61/Install_HTRA_SDK.zip || handle_error "SDK download"
-        unzip Install_HTRA_SDK.zip || handle_error "SDK extraction"
-        cd Install_HTRA_SDK
-        mkdir -p /etc/udev/rules.d
-        chmod +x install_htraapi_lib.sh
-        ./install_htraapi_lib.sh || handle_error "SDK installation"
-        if [ ! -d "/opt/htraapi" ]; then handle_error "HTRA API installation verification"; fi
-
-        echo "--- 4. Building SoapyHarogic ---"
-        cd /workspace/build
-        
-        ARCH_NAME=""
-        case "${{ matrix.arch }}" in
-            "amd64") ARCH_NAME="x86_64" ;;
-            "arm64") ARCH_NAME="aarch64" ;;
-        esac
-        if [ -z "$ARCH_NAME" ]; then handle_error "Unsupported architecture: ${{ matrix.arch }}"; fi
-
-        HTRA_LIB_PATH="/opt/htraapi/lib/${ARCH_NAME}"
-        HTRA_INCLUDE_PATH="/opt/htraapi/inc"
-        
-        # Hide other architectures to force CMake to use the correct one
-        for other_arch in x86_64 aarch64 armv7 aarch64_gcc7.5 x86_64_gcc5.4; do
-            if [ "$other_arch" != "$ARCH_NAME" ] && [ -d "/opt/htraapi/lib/$other_arch" ]; then
-                mv "/opt/htraapi/lib/$other_arch" "/opt/htraapi/lib/${other_arch}.hidden"
-            fi
-        done
-        
-        if [ ! -f "${HTRA_LIB_PATH}/libhtraapi.so" ]; then 
-            ln -sf libhtraapi.so.* "${HTRA_LIB_PATH}/libhtraapi.so"
-        fi
-        git config --global --add safe.directory /workspace
-        
-        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DHTRA_ROOT="/opt/htraapi" -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" /workspace || handle_error "CMake configuration"
-        make -j$(nproc) || handle_error "compilation"
-        DESTDIR=/workspace/debian-package make install || handle_error "installation"
-        
-        # Restore hidden architectures
-        for other_arch in x86_64 aarch64 armv7 aarch64_gcc7.5 x86_64_gcc5.4; do
-            if [ "$other_arch" != "$ARCH_NAME" ] && [ -d "/opt/htraapi/lib/${other_arch}.hidden" ]; then
-                mv "/opt/htraapi/lib/${other_arch}.hidden" "/opt/htraapi/lib/$other_arch"
-            fi
-        done
-
-        echo "--- 5. Bundling libraries and configuration ---"
-        cp "${HTRA_LIB_PATH}/libhtraapi.so.0.55.61" /workspace/debian-package/usr/local/lib/
-        ln -sf libhtraapi.so.0.55.61 /workspace/debian-package/usr/local/lib/libhtraapi.so.0
-        ln -sf libhtraapi.so.0 /workspace/debian-package/usr/local/lib/libhtraapi.so
-        mkdir -p /workspace/debian-package/etc/udev/rules.d
-        cp /opt/htraapi/configs/htra-cyusb.rules /workspace/debian-package/etc/udev/rules.d/
-
-        echo "--- 6. Creating Debian package metadata ---"
-        BUILD_SCRIPT_EOF
-        
-        # Create the control file separately to avoid EOF conflicts
-        cat >> build-and-package.sh << 'CONTROL_SECTION_EOF'
-        cat > /workspace/debian-package/DEBIAN/control << 'INNER_CONTROL_EOF'
-Package: ${{ env.PACKAGE_NAME }}
-Version: ${{ steps.version.outputs.VERSION }}
-Architecture: ${{ matrix.arch }}
-Maintainer: ${{ env.MAINTAINER }}
-Homepage: ${{ env.HOMEPAGE }}
-Section: electronics
-Priority: optional
-Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-Description: ${{ env.DESCRIPTION }}
- This package includes the required Harogic HTRA API library and SoapySDR
- plugin for using Harogic devices with software like GQRX, CubicSDR, etc.
-INNER_CONTROL_EOF
-
-        cat > /workspace/debian-package/DEBIAN/postinst << 'INNER_POSTINST_EOF'
-#!/bin/bash
-set -e
-ldconfig
-if command -v SoapySDRUtil >/dev/null 2>&1; then SoapySDRUtil --info >/dev/null 2>&1 || true; fi
-if [ ! -d "/usr/bin/CalFile" ]; then mkdir -p /usr/bin/CalFile && echo "NOTE: Place your Harogic calibration files in /usr/bin/CalFile"; fi
-exit 0
-INNER_POSTINST_EOF
-        chmod 755 /workspace/debian-package/DEBIAN/postinst
-
-        echo "--- 7. Building the final package ---"
-        PACKAGE_FILENAME="${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb"
-        fakeroot dpkg-deb --build debian-package "/workspace/build-output/${PACKAGE_FILENAME}" || handle_error "dpkg-deb build"
-        lintian "/workspace/build-output/${PACKAGE_FILENAME}" || echo "Lintian finished with warnings (non-fatal)."
-        echo "Build completed successfully for ${{ matrix.arch }}"
-        CONTROL_SECTION_EOF
-        
-        chmod +x build-and-package.sh
-
-    - name: Build package in Docker container
+    - name: Build in Docker container
       run: |
         docker run --rm --platform=${{ matrix.platform }} \
           -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          -e PACKAGE_NAME="${{ env.PACKAGE_NAME }}" \
+          -e VERSION="${{ steps.version.outputs.VERSION }}" \
+          -e ARCH="${{ matrix.arch }}" \
+          -e MAINTAINER="${{ env.MAINTAINER }}" \
+          -e DESCRIPTION="${{ env.DESCRIPTION }}" \
+          -e HOMEPAGE="${{ env.HOMEPAGE }}" \
           ubuntu:22.04 \
-          /workspace/build-and-package.sh
+          bash -c '
+            set -e
+            
+            # Update package list and install dependencies
+            apt-get update
+            apt-get install -y build-essential cmake pkg-config git wget curl libsoapysdr-dev soapysdr-tools dpkg-dev debhelper fakeroot lintian unzip
+
+            # Create directories for build
+            mkdir -p /workspace/build /workspace/debian-package/DEBIAN /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8 /workspace/debian-package/usr/share/doc/$PACKAGE_NAME
+
+            # Download and install Harogic HTRA API SDK
+            echo "Downloading Harogic HTRA SDK..."
+            cd /tmp
+            wget https://github.com/PentHertz/rfswift_harogic_install/releases/download/0.55.61/Install_HTRA_SDK.zip
+            unzip Install_HTRA_SDK.zip
+            cd Install_HTRA_SDK
+            chmod +x install_htraapi_lib.sh
+            ./install_htraapi_lib.sh
+            
+            # Build the project
+            cd /workspace/build
+            
+            ARCH_NAME=""
+            case "$ARCH" in
+                "amd64") ARCH_NAME="x86_64" ;;
+                "arm64") ARCH_NAME="aarch64" ;;
+            esac
+            
+            echo "Building for architecture: $ARCH ($ARCH_NAME)"
+            
+            HTRA_LIB_PATH="/opt/htraapi/lib/${ARCH_NAME}"
+            HTRA_INCLUDE_PATH="/opt/htraapi/inc"
+            
+            if [ ! -f "${HTRA_LIB_PATH}/libhtraapi.so" ]; then
+                echo "Creating missing symlink for libhtraapi.so..."
+                ln -sf libhtraapi.so.* "${HTRA_LIB_PATH}/libhtraapi.so"
+            fi
+            
+            git config --global --add safe.directory /workspace || true
+            
+            cmake -DCMAKE_BUILD_TYPE=Release \
+                  -DCMAKE_INSTALL_PREFIX=/usr/local \
+                  -DHTRA_ROOT="/opt/htraapi" \
+                  -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
+                  -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
+                  /workspace
+            
+            make -j$(nproc)
+            DESTDIR=/workspace/debian-package make install
+            
+            # Copy the architecture-specific HTRA library and dependencies to the package
+            echo "Including HTRA library for ${ARCH_NAME} in package..."
+            mkdir -p /workspace/debian-package/usr/local/lib
+            cp "${HTRA_LIB_PATH}/libhtraapi.so.0.55.61" /workspace/debian-package/usr/local/lib/
+            ln -sf libhtraapi.so.0.55.61 /workspace/debian-package/usr/local/lib/libhtraapi.so.0
+            ln -sf libhtraapi.so.0 /workspace/debian-package/usr/local/lib/libhtraapi.so
+            
+            # Copy udev rules
+            mkdir -p /workspace/debian-package/etc/udev/rules.d
+            cp /opt/htraapi/configs/htra-cyusb.rules /workspace/debian-package/etc/udev/rules.d/
+            
+            # Create debian control file
+            cat > /workspace/debian-package/DEBIAN/control <<EOF
+Package: $PACKAGE_NAME
+Version: $VERSION
+Section: electronics
+Priority: optional
+Architecture: $ARCH
+Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
+Maintainer: $MAINTAINER
+Description: $DESCRIPTION
+ This package provides a SoapySDR plugin to use Harogic HTRA series devices.
+ .
+ This package includes the architecture-specific Harogic HTRA API library
+ for $ARCH systems, so no separate SDK installation is required.
+Homepage: $HOMEPAGE
+EOF
+            
+            # Create postinst script (using quoted "EOF" to prevent shell expansion)
+            cat > /workspace/debian-package/DEBIAN/postinst << "EOF"
+#!/bin/bash
+set -e
+# Update library cache
+ldconfig
+# Refresh SoapySDR module cache
+if command -v SoapySDRUtil >/dev/null 2>&1; then
+    echo "Refreshing SoapySDR module cache..."
+    SoapySDRUtil --info >/dev/null 2>&1 || true
+fi
+# Create CalFile directory if it does not exist
+if [ ! -d "/usr/bin/CalFile" ]; then
+    echo "Creating calibration file directory at /usr/bin/CalFile"
+    mkdir -p /usr/bin/CalFile
+    echo "Note: Place your Harogic calibration files in /usr/bin/CalFile"
+fi
+exit 0
+EOF
+            
+            # Make postinst script executable
+            chmod 755 /workspace/debian-package/DEBIAN/postinst
+            
+            # Fix all file and directory permissions
+            find /workspace/debian-package -type d -exec chmod 755 {} \;
+            find /workspace/debian-package -type f -exec chmod 644 {} \;
+            chmod 755 /workspace/debian-package/DEBIAN/postinst
+            
+            # Build the .deb package
+            cd /workspace
+            fakeroot dpkg-deb --build debian-package build-output/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb
+            
+            # Verify and check the package
+            lintian build-output/${PACKAGE_NAME}_${VERSION}_${ARCH}.deb || echo "Lintian warnings are non-fatal"
+            
+            echo "Build completed successfully for $ARCH"
+          '
 
     - name: Upload build artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: soapyharogic-${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
-        path: |
-          build-output/*.deb
-          build-output/*.log
+        name: ${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
+        path: build-output/
         retention-days: 7
         if-no-files-found: warn
 
@@ -190,55 +197,3 @@ INNER_POSTINST_EOF
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs: build
-    if: always()
-    steps:
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-
-    - name: Display build summary
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "| Architecture | Status | Package |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
-        
-        SUCCESS_ARCHS=""
-        for dir in artifacts/*/; do
-          if [ ! -d "$dir" ]; then continue; fi
-
-          arch=""
-          if [[ "$dir" == *"-amd64"* ]]; then arch="amd64"; fi
-          if [[ "$dir" == *"-arm64"* ]]; then arch="arm64"; fi
-          
-          if [ -n "$arch" ]; then
-            SUCCESS_ARCHS="$SUCCESS_ARCHS $arch"
-            package_file=$(find "$dir" -name "*.deb" -print -quit)
-            if [ -n "$package_file" ]; then
-              package_name=$(basename "$package_file")
-              echo "| ${arch} | ✅ Success | \`${package_name}\` |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| ${arch} | ❌ Failed | .deb file not found in artifact |" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
-        done
-
-        for arch in amd64 arm64; do
-            if ! [[ "$SUCCESS_ARCHS" == *"$arch"* ]]; then
-                echo "| ${arch} | ❌ Failed | Build artifact not found |" >> $GITHUB_STEP_SUMMARY
-            fi
-        done
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Installation Instructions" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo "# Download the appropriate package for your architecture" >> $GITHUB_STEP_SUMMARY
-        echo "sudo dpkg -i soapyharogic_*_amd64.deb   # For x86_64 systems" >> $GITHUB_STEP_SUMMARY
-        echo "sudo dpkg -i soapyharogic_*_arm64.deb   # For ARM64 systems" >> $GITHUB_STEP_SUMMARY
-        echo "sudo apt-get install -f                 # Install dependencies if needed" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
