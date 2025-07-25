@@ -120,7 +120,7 @@ jobs:
         mkdir -p /workspace/debian-package/DEBIAN
         mkdir -p /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8
         mkdir -p /workspace/debian-package/usr/local/include
-        mkdir -p /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}
+        mkdir -p /workspace/debian-package/usr/share/doc/soapyharogic
 
         # Download and install Harogic HTRA API SDK
         echo "Downloading Harogic HTRA SDK..."
@@ -296,14 +296,14 @@ jobs:
 
         # Create debian control file
         cat > /workspace/debian-package/DEBIAN/control << "CONTROL_EOF"
-Package: ${{ env.PACKAGE_NAME }}
-Version: ${{ steps.version.outputs.VERSION }}
+Package: soapyharogic
+Version: VERSION_PLACEHOLDER
 Section: electronics
 Priority: optional
-Architecture: ${{ matrix.arch }}
+Architecture: ARCH_PLACEHOLDER
 Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-Maintainer: ${{ env.MAINTAINER }}
-Description: ${{ env.DESCRIPTION }}
+Maintainer: Sébastien Dudek <maintainer@penthertz.com>
+Description: SoapySDR plugin for Harogic HTRA series spectrum analysis devices
  This package provides a SoapySDR plugin that allows software supporting
  the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
  Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
@@ -312,9 +312,13 @@ Description: ${{ env.DESCRIPTION }}
  configurable sample rates, RF frequency control, and comprehensive gain control.
  .
  This package includes the architecture-specific Harogic HTRA API library
- for ${{ matrix.arch }} systems.
-Homepage: ${{ env.HOMEPAGE }}
+ for ARCH_PLACEHOLDER systems.
+Homepage: https://github.com/PentHertz/SoapyHarogic
 CONTROL_EOF
+
+        # Replace placeholders in control file
+        sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" /workspace/debian-package/DEBIAN/control
+        sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" /workspace/debian-package/DEBIAN/control
         
         # Create postinst script
         cat > /workspace/debian-package/DEBIAN/postinst << "POSTINST_EOF"
@@ -369,7 +373,7 @@ PRERM_EOF
         chmod 755 /workspace/debian-package/DEBIAN/prerm
         
         # Create copyright file
-        cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright << "COPYRIGHT_EOF"
+        cat > /workspace/debian-package/usr/share/doc/soapyharogic/copyright << "COPYRIGHT_EOF"
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: SoapyHarogic
 Upstream-Contact: Sébastien Dudek <contact@penthertz.com>
@@ -397,17 +401,22 @@ License: LGPL-2.1
 COPYRIGHT_EOF
         
         # Create changelog
-        cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian << "CHANGELOG_EOF"
-${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium
+        cat > /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian << "CHANGELOG_EOF"
+soapyharogic (VERSION_PLACEHOLDER) unstable; urgency=medium
 
   * Automated build from GitHub Actions
-  * Built for ${{ matrix.arch }} architecture
+  * Built for ARCH_PLACEHOLDER architecture
 
- -- ${{ env.MAINTAINER }}  $(date -R)
+ -- Sébastien Dudek <maintainer@penthertz.com>  DATE_PLACEHOLDER
 CHANGELOG_EOF
+
+        # Replace placeholders in changelog
+        sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
+        sed -i "s/DATE_PLACEHOLDER/$(date -R)/g" /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         
         # Compress changelog
-        gzip -9 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+        gzip -9 /workspace/debian-package/usr/share/doc/soapyharogic/changelog.Debian
         
         # Fix permissions
         find /workspace/debian-package -type f -exec chmod 644 {} \;
@@ -418,17 +427,21 @@ CHANGELOG_EOF
         # Build the .deb package
         cd /workspace
         echo "Building .deb package..."
-        fakeroot dpkg-deb --build debian-package build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb || handle_error "package creation"
+        fakeroot dpkg-deb --build debian-package build-output/PACKAGE_FILENAME || handle_error "package creation"
+        
+        # Replace placeholder in filename
+        FINAL_FILENAME="soapyharogic_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb"
+        mv build-output/PACKAGE_FILENAME "build-output/${FINAL_FILENAME}" 2>/dev/null || true
         
         # Verify the package
         echo "Package contents:"
-        dpkg-deb -c build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb
+        dpkg-deb -c "build-output/${FINAL_FILENAME}"
         
         echo "Package info:"
-        dpkg-deb -I build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb
+        dpkg-deb -I "build-output/${FINAL_FILENAME}"
         
         # Run lintian checks (non-fatal)
-        lintian build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb || echo "Lintian warnings (non-fatal)"
+        lintian "build-output/${FINAL_FILENAME}" || echo "Lintian warnings (non-fatal)"
         
         echo "Build completed successfully for ${{ matrix.arch }}"
         BUILD_SCRIPT_EOF
