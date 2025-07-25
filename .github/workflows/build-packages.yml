@@ -270,26 +270,26 @@ jobs:
             fi
             
             # Create debian control file
-            cat > /workspace/debian-package/DEBIAN/control << EOF
-            Package: ${{ env.PACKAGE_NAME }}
-            Version: ${{ steps.version.outputs.VERSION }}
-            Section: electronics
-            Priority: optional
-            Architecture: ${{ matrix.arch }}
-            Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-            Maintainer: ${{ env.MAINTAINER }}
-            Description: ${{ env.DESCRIPTION }}
-             This package provides a SoapySDR plugin that allows software supporting
-             the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
-             Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
-             .
-             Features include auto-discovery of connected devices, IQ streaming support,
-             configurable sample rates, RF frequency control, and comprehensive gain control.
-             .
-             This package includes the architecture-specific Harogic HTRA API library
-             for ${{ matrix.arch }} systems.
-            Homepage: ${{ env.HOMEPAGE }}
-            EOF
+            cat > /workspace/debian-package/DEBIAN/control << "CONTROL_EOF"
+Package: ${{ env.PACKAGE_NAME }}
+Version: ${{ steps.version.outputs.VERSION }}
+Section: electronics
+Priority: optional
+Architecture: ${{ matrix.arch }}
+Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
+Maintainer: ${{ env.MAINTAINER }}
+Description: ${{ env.DESCRIPTION }}
+ This package provides a SoapySDR plugin that allows software supporting
+ the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
+ Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
+ .
+ Features include auto-discovery of connected devices, IQ streaming support,
+ configurable sample rates, RF frequency control, and comprehensive gain control.
+ .
+ This package includes the architecture-specific Harogic HTRA API library
+ for ${{ matrix.arch }} systems.
+Homepage: ${{ env.HOMEPAGE }}
+CONTROL_EOF
             
             # Create postinst script
             cat > /workspace/debian-package/DEBIAN/postinst << "EOF"
@@ -332,55 +332,55 @@ jobs:
             EOF
             
             # Create prerm script
-            cat > /workspace/debian-package/DEBIAN/prerm << "EOF"
-            #!/bin/bash
-            set -e
-            
-            # Nothing special needed for removal
-            exit 0
-            EOF
+            cat > /workspace/debian-package/DEBIAN/prerm << "PRERM_EOF"
+#!/bin/bash
+set -e
+
+# Nothing special needed for removal
+exit 0
+PRERM_EOF
             
             # Make scripts executable
             chmod 755 /workspace/debian-package/DEBIAN/postinst
             chmod 755 /workspace/debian-package/DEBIAN/prerm
             
             # Create copyright file
-            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright << "EOF"
-            Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-            Upstream-Name: SoapyHarogic
-            Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
-            Source: https://github.com/PentHertz/SoapyHarogic
-            
-            Files: *
-            Copyright: 2025 Sébastien Dudek / penthertz.com
-            License: LGPL-2.1
-             This library is free software; you can redistribute it and/or
-             modify it under the terms of the GNU Lesser General Public
-             License as published by the Free Software Foundation; either
-             version 2.1 of the License, or (at your option) any later version.
-             .
-             This library is distributed in the hope that it will be useful,
-             but WITHOUT ANY WARRANTY; without even the implied warranty of
-             MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-             Lesser General Public License for more details.
-             .
-             You should have received a copy of the GNU Lesser General Public
-             License along with this library; if not, write to the Free Software
-             Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-             .
-             On Debian systems, the complete text of the GNU Lesser General Public
-             License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
-            EOF
+            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright << "COPYRIGHT_EOF"
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: SoapyHarogic
+Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
+Source: https://github.com/PentHertz/SoapyHarogic
+
+Files: *
+Copyright: 2025 Sébastien Dudek / penthertz.com
+License: LGPL-2.1
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+ .
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+ .
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ .
+ On Debian systems, the complete text of the GNU Lesser General Public
+ License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
+COPYRIGHT_EOF
             
             # Create changelog
-            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian << EOF
-            ${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium
-            
-              * Automated build from GitHub Actions
-              * Built for ${{ matrix.arch }} architecture
-            
-             -- ${{ env.MAINTAINER }}  $(date -R)
-            EOF
+            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian << "CHANGELOG_EOF"
+${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium
+
+  * Automated build from GitHub Actions
+  * Built for ${{ matrix.arch }} architecture
+
+ -- ${{ env.MAINTAINER }}  $(date -R)
+CHANGELOG_EOF
             
             # Compress changelog
             gzip -9 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
