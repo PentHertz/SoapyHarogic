@@ -99,6 +99,9 @@ jobs:
             unzip Install_HTRA_SDK.zip
             cd Install_HTRA_SDK
             
+            # Create necessary directories for the installation script
+            mkdir -p /etc/udev/rules.d
+            
             # Make the installation script executable and run it
             chmod +x install_htraapi_lib.sh
             echo "Installing Harogic HTRA SDK..."
@@ -143,33 +146,50 @@ jobs:
                     ;;
             esac
             
+            echo "Building for architecture: ${{ matrix.arch }} (${ARCH_NAME})"
+            
             # Set up build environment with proper architecture-specific paths
             if [ -d "/opt/htraapi" ] && [ -n "$ARCH_NAME" ]; then
                 HTRA_LIB_PATH="/opt/htraapi/lib/${ARCH_NAME}"
                 HTRA_INCLUDE_PATH="/opt/htraapi/inc"
                 
-                # Verify the correct library exists
-                if [ -f "${HTRA_LIB_PATH}/libhtraapi.so" ]; then
-                    echo "Found HTRA library for ${ARCH_NAME} at: ${HTRA_LIB_PATH}/libhtraapi.so"
+                # Verify the correct library exists (check for the versioned library)
+                if [ -f "${HTRA_LIB_PATH}/libhtraapi.so.0.55.61" ]; then
+                    echo "Found HTRA versioned library for ${ARCH_NAME} at: ${HTRA_LIB_PATH}/libhtraapi.so.0.55.61"
                     
-                    export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+                    # Ensure the unversioned symlink exists
+                    if [ ! -f "${HTRA_LIB_PATH}/libhtraapi.so" ]; then
+                        echo "Creating missing symlink..."
+                        ln -sf libhtraapi.so.0.55.61 "${HTRA_LIB_PATH}/libhtraapi.so"
+                    fi
+                    
+                    # Set environment variables to prevent CMake from finding wrong architecture libraries
                     export LD_LIBRARY_PATH="${HTRA_LIB_PATH}:$LD_LIBRARY_PATH"
+                    export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
                     
+                    # Force CMake to use the specific architecture library by setting CMAKE_FIND_ROOT_PATH
                     cmake -DCMAKE_BUILD_TYPE=Release \
                           -DCMAKE_INSTALL_PREFIX=/usr/local \
                           -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
-                          -DCMAKE_PREFIX_PATH="/opt/htraapi" \
+                          -DCMAKE_FIND_ROOT_PATH="/opt/htraapi" \
+                          -DHTRA_ROOT="/opt/htraapi" \
                           -DHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
                           -DHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
+                          -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
+                          -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
                           ..
                 else
-                    echo "Warning: HTRA library not found for ${ARCH_NAME} at ${HTRA_LIB_PATH}"
-                    echo "Available libraries:"
-                    find /opt/htraapi/lib -name "libhtraapi.so" 2>/dev/null || true
+                    echo "Error: HTRA versioned library not found for ${ARCH_NAME} at ${HTRA_LIB_PATH}"
+                    echo "Available files in ${HTRA_LIB_PATH}:"
+                    ls -la "${HTRA_LIB_PATH}/" 2>/dev/null || echo "Directory not found"
+                    echo "Available libraries in all arch directories:"
+                    find /opt/htraapi/lib -name "libhtraapi.so*" 2>/dev/null || true
                     exit 1
                 fi
             else
                 echo "Error: HTRA API not found or architecture not supported"
+                echo "Available architecture directories:"
+                ls -la /opt/htraapi/lib/ 2>/dev/null || echo "HTRA API not installed"
                 exit 1
             fi
             
@@ -180,18 +200,47 @@ jobs:
             
             # Copy the architecture-specific HTRA library to the package
             # This ensures the correct library is included in the .deb package
-            if [ -n "$ARCH_NAME" ] && [ -f "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so" ]; then
+            if [ -n "$ARCH_NAME" ] && [ -f "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so.0.55.61" ]; then
                 echo "Including HTRA library for ${ARCH_NAME} in package..."
                 mkdir -p /workspace/debian-package/usr/local/lib
-                cp "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so"* /workspace/debian-package/usr/local/lib/ || true
                 
-                # Also copy required dependencies if they exist
-                if [ -f "/opt/htraapi/lib/${ARCH_NAME}/libusb-1.0.so" ]; then
-                    cp "/opt/htraapi/lib/${ARCH_NAME}/libusb-1.0.so"* /workspace/debian-package/usr/local/lib/ || true
+                # Copy the versioned library and create symlinks
+                cp "/opt/htraapi/lib/${ARCH_NAME}/libhtraapi.so.0.55.61" /workspace/debian-package/usr/local/lib/
+                ln -sf libhtraapi.so.0.55.61 /workspace/debian-package/usr/local/lib/libhtraapi.so.0
+                ln -sf libhtraapi.so.0 /workspace/debian-package/usr/local/lib/libhtraapi.so
+                
+                # Also copy other required dependencies if they exist
+                for lib in libliquid.so libusb-1.0.so.0.2.0 libgomp.so.1.0.0; do
+                    if [ -f "/opt/htraapi/lib/${ARCH_NAME}/${lib}" ]; then
+                        cp "/opt/htraapi/lib/${ARCH_NAME}/${lib}" /workspace/debian-package/usr/local/lib/
+                        echo "Included dependency: ${lib}"
+                    fi
+                done
+                
+                # Copy additional architecture-specific libraries if they exist
+                if [ "$ARCH_NAME" = "aarch64" ] && [ -f "/opt/htraapi/lib/aarch64_gcc7.5/libarmral.so" ]; then
+                    cp "/opt/htraapi/lib/aarch64_gcc7.5/libarmral.so" /workspace/debian-package/usr/local/lib/
+                    echo "Included architecture-specific library: libarmral.so"
                 fi
-                if [ -f "/opt/htraapi/lib/${ARCH_NAME}/libgomp.so" ]; then
-                    cp "/opt/htraapi/lib/${ARCH_NAME}/libgomp.so"* /workspace/debian-package/usr/local/lib/ || true
+                
+                if [ "$ARCH_NAME" = "x86_64" ]; then
+                    for lib in libiomp5.so libmkl.so; do
+                        if [ -f "/opt/htraapi/lib/x86_64_gcc5.4/${lib}" ]; then
+                            cp "/opt/htraapi/lib/x86_64_gcc5.4/${lib}" /workspace/debian-package/usr/local/lib/
+                            echo "Included x86_64-specific library: ${lib}"
+                        fi
+                    done
                 fi
+            fi
+            
+            # Copy udev rules and config files to the package
+            mkdir -p /workspace/debian-package/etc/udev/rules.d
+            mkdir -p /workspace/debian-package/etc
+            if [ -f "/opt/htraapi/configs/htra-cyusb.rules" ]; then
+                cp "/opt/htraapi/configs/htra-cyusb.rules" /workspace/debian-package/etc/udev/rules.d/
+            fi
+            if [ -f "/opt/htraapi/configs/htrausb.conf" ]; then
+                cp "/opt/htraapi/configs/htrausb.conf" /workspace/debian-package/etc/
             fi
             
             # Create debian control file
