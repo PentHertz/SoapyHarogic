@@ -62,15 +62,15 @@ jobs:
             exit 1
         }
         
-        exec > >(tee "/workspace/build-output/build-ARCH_PLACEHOLDER.log") 2>&1
-        echo "Starting build for ARCH_PLACEHOLDER at $(date)"
+        exec > >(tee "/workspace/build-output/build-${{ matrix.arch }}.log") 2>&1
+        echo "Starting build for ${{ matrix.arch }} at $(date)"
         
         echo "--- 1. Installing dependencies ---"
         apt-get update || handle_error "apt-get update"
         apt-get install -y build-essential cmake pkg-config git wget curl libsoapysdr-dev soapysdr-tools dpkg-dev debhelper fakeroot lintian unzip || handle_error "dependency installation"
 
         echo "--- 2. Creating package structure ---"
-        mkdir -p /workspace/build /workspace/debian-package/DEBIAN /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8 /workspace/debian-package/usr/share/doc/PACKAGE_NAME_PLACEHOLDER
+        mkdir -p /workspace/build /workspace/debian-package/DEBIAN /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}
 
         echo "--- 3. Downloading and installing Harogic HTRA SDK ---"
         cd /tmp
@@ -86,11 +86,11 @@ jobs:
         cd /workspace/build
         
         ARCH_NAME=""
-        case "ARCH_PLACEHOLDER" in
+        case "${{ matrix.arch }}" in
             "amd64") ARCH_NAME="x86_64" ;;
             "arm64") ARCH_NAME="aarch64" ;;
         esac
-        if [ -z "$ARCH_NAME" ]; then handle_error "Unsupported architecture: ARCH_PLACEHOLDER"; fi
+        if [ -z "$ARCH_NAME" ]; then handle_error "Unsupported architecture: ${{ matrix.arch }}"; fi
 
         HTRA_LIB_PATH="/opt/htraapi/lib/${ARCH_NAME}"
         HTRA_INCLUDE_PATH="/opt/htraapi/inc"
@@ -107,12 +107,7 @@ jobs:
         fi
         git config --global --add safe.directory /workspace
         
-        cmake -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_INSTALL_PREFIX=/usr/local \
-              -DHTRA_ROOT="/opt/htraapi" \
-              -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" \
-              -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" \
-              /workspace || handle_error "CMake configuration"
+        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local -DHTRA_ROOT="/opt/htraapi" -DLibHTRA_INCLUDE_DIR="${HTRA_INCLUDE_PATH}" -DLibHTRA_LIBRARY="${HTRA_LIB_PATH}/libhtraapi.so" /workspace || handle_error "CMake configuration"
         make -j$(nproc) || handle_error "compilation"
         DESTDIR=/workspace/debian-package make install || handle_error "installation"
         
@@ -124,77 +119,47 @@ jobs:
         done
 
         echo "--- 5. Bundling libraries and configuration ---"
-        mkdir -p /workspace/debian-package/usr/local/lib
         cp "${HTRA_LIB_PATH}/libhtraapi.so.0.55.61" /workspace/debian-package/usr/local/lib/
         ln -sf libhtraapi.so.0.55.61 /workspace/debian-package/usr/local/lib/libhtraapi.so.0
         ln -sf libhtraapi.so.0 /workspace/debian-package/usr/local/lib/libhtraapi.so
-        
-        # Copy additional dependencies
-        for lib in libliquid.so libusb-1.0.so.0.2.0 libgomp.so.1.0.0; do
-            if [ -f "${HTRA_LIB_PATH}/${lib}" ]; then
-                cp "${HTRA_LIB_PATH}/${lib}" /workspace/debian-package/usr/local/lib/
-            fi
-        done
-        
         mkdir -p /workspace/debian-package/etc/udev/rules.d
-        if [ -f "/opt/htraapi/configs/htra-cyusb.rules" ]; then
-            cp /opt/htraapi/configs/htra-cyusb.rules /workspace/debian-package/etc/udev/rules.d/
-        fi
+        cp /opt/htraapi/configs/htra-cyusb.rules /workspace/debian-package/etc/udev/rules.d/
 
         echo "--- 6. Creating Debian package metadata ---"
-        cat > /workspace/debian-package/DEBIAN/control << 'CONTROL_EOF'
-Package: PACKAGE_NAME_PLACEHOLDER
-Version: VERSION_PLACEHOLDER
-Architecture: ARCH_PLACEHOLDER
-Maintainer: MAINTAINER_PLACEHOLDER
-Homepage: HOMEPAGE_PLACEHOLDER
+        BUILD_SCRIPT_EOF
+        
+        # Create the control file separately to avoid EOF conflicts
+        cat >> build-and-package.sh << 'CONTROL_SECTION_EOF'
+        cat > /workspace/debian-package/DEBIAN/control << 'INNER_CONTROL_EOF'
+Package: ${{ env.PACKAGE_NAME }}
+Version: ${{ steps.version.outputs.VERSION }}
+Architecture: ${{ matrix.arch }}
+Maintainer: ${{ env.MAINTAINER }}
+Homepage: ${{ env.HOMEPAGE }}
 Section: electronics
 Priority: optional
 Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1, libusb-1.0-0
-Description: DESCRIPTION_PLACEHOLDER
+Description: ${{ env.DESCRIPTION }}
  This package includes the required Harogic HTRA API library and SoapySDR
  plugin for using Harogic devices with software like GQRX, CubicSDR, etc.
-CONTROL_EOF
+INNER_CONTROL_EOF
 
-        cat > /workspace/debian-package/DEBIAN/postinst << 'POSTINST_EOF'
+        cat > /workspace/debian-package/DEBIAN/postinst << 'INNER_POSTINST_EOF'
 #!/bin/bash
 set -e
 ldconfig
-if command -v SoapySDRUtil >/dev/null 2>&1; then 
-    SoapySDRUtil --info >/dev/null 2>&1 || true
-fi
-if [ ! -d "/usr/bin/CalFile" ]; then 
-    mkdir -p /usr/bin/CalFile
-    echo "NOTE: Place your Harogic calibration files in /usr/bin/CalFile"
-fi
+if command -v SoapySDRUtil >/dev/null 2>&1; then SoapySDRUtil --info >/dev/null 2>&1 || true; fi
+if [ ! -d "/usr/bin/CalFile" ]; then mkdir -p /usr/bin/CalFile && echo "NOTE: Place your Harogic calibration files in /usr/bin/CalFile"; fi
 exit 0
-POSTINST_EOF
+INNER_POSTINST_EOF
         chmod 755 /workspace/debian-package/DEBIAN/postinst
 
         echo "--- 7. Building the final package ---"
-        find /workspace/debian-package -type f -exec chmod 644 {} \;
-        find /workspace/debian-package -type d -exec chmod 755 {} \;
-        chmod 755 /workspace/debian-package/DEBIAN/postinst
-        
-        PACKAGE_FILENAME="PACKAGE_NAME_PLACEHOLDER_VERSION_PLACEHOLDER_ARCH_PLACEHOLDER.deb"
+        PACKAGE_FILENAME="${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb"
         fakeroot dpkg-deb --build debian-package "/workspace/build-output/${PACKAGE_FILENAME}" || handle_error "dpkg-deb build"
         lintian "/workspace/build-output/${PACKAGE_FILENAME}" || echo "Lintian finished with warnings (non-fatal)."
-        echo "Build completed successfully for ARCH_PLACEHOLDER"
-        BUILD_SCRIPT_EOF
-        
-        # Replace placeholders with actual values
-        sed -i "s/ARCH_PLACEHOLDER/${{ matrix.arch }}/g" build-and-package.sh
-        sed -i "s/VERSION_PLACEHOLDER/${{ steps.version.outputs.VERSION }}/g" build-and-package.sh
-        sed -i "s/PACKAGE_NAME_PLACEHOLDER/${{ env.PACKAGE_NAME }}/g" build-and-package.sh
-        
-        # Use environment variables for complex replacements
-        export MAINTAINER_VALUE="${{ env.MAINTAINER }}"
-        export HOMEPAGE_VALUE="${{ env.HOMEPAGE }}"
-        export DESCRIPTION_VALUE="${{ env.DESCRIPTION }}"
-        
-        sed -i "s|MAINTAINER_PLACEHOLDER|${MAINTAINER_VALUE}|g" build-and-package.sh
-        sed -i "s|HOMEPAGE_PLACEHOLDER|${HOMEPAGE_VALUE}|g" build-and-package.sh
-        sed -i "s|DESCRIPTION_PLACEHOLDER|${DESCRIPTION_VALUE}|g" build-and-package.sh
+        echo "Build completed successfully for ${{ matrix.arch }}"
+        CONTROL_SECTION_EOF
         
         chmod +x build-and-package.sh
 
