@@ -1,0 +1,372 @@
+name: Build SoapyHarogic Multi-Architecture Packages
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  # Package information
+  PACKAGE_NAME: soapyharogic
+  MAINTAINER: "Sébastien Dudek <maintainer@penthertz.com>"
+  DESCRIPTION: "SoapySDR plugin for Harogic HTRA series spectrum analysis devices"
+  HOMEPAGE: "https://github.com/PentHertz/SoapyHarogic"
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }} package
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            gcc_arch: x86_64-linux-gnu
+          - arch: arm64
+            platform: linux/arm64
+            gcc_arch: aarch64-linux-gnu
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up QEMU for cross-compilation
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: ${{ matrix.platform }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Get version from tag or commit
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        else
+          VERSION=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-8)
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "PACKAGE_VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Create build directory
+      run: mkdir -p build-output
+
+    - name: Build in Docker container
+      run: |
+        docker run --rm --platform=${{ matrix.platform }} \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          ubuntu:22.04 \
+          bash -c '
+            set -e
+            
+            # Update package list and install dependencies
+            apt-get update
+            apt-get install -y \
+              build-essential \
+              cmake \
+              pkg-config \
+              git \
+              wget \
+              curl \
+              libsoapysdr-dev \
+              soapysdr-tools \
+              dpkg-dev \
+              debhelper \
+              fakeroot \
+              lintian
+
+            # Create directories for build
+            mkdir -p /workspace/build
+            mkdir -p /workspace/debian-package/DEBIAN
+            mkdir -p /workspace/debian-package/usr/local/lib/SoapySDR/modules0.8
+            mkdir -p /workspace/debian-package/usr/local/include
+            mkdir -p /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}
+
+            # Download and install Harogic HTRA API SDK
+            echo "Downloading Harogic HTRA SDK..."
+            cd /tmp
+            wget https://github.com/PentHertz/rfswift_harogic_install/releases/download/0.55.61/Install_HTRA_SDK.zip
+            
+            # Extract the SDK
+            apt-get install -y unzip
+            unzip Install_HTRA_SDK.zip
+            cd Install_HTRA_SDK
+            
+            # Make the installation script executable and run it
+            chmod +x install_htraapi_lib.sh
+            echo "Installing Harogic HTRA SDK..."
+            ./install_htraapi_lib.sh
+            
+            # Verify installation
+            if [ ! -f "/usr/local/lib/libhtra_api.so" ] && [ ! -f "/opt/htraapi/lib/libhtra_api.so" ]; then
+                echo "Warning: libhtra_api.so not found in expected locations"
+                echo "Checking for SDK files..."
+                find /opt /usr/local -name "*htra*" -o -name "*HTRA*" 2>/dev/null || true
+            fi
+            
+            if [ ! -f "/usr/local/include/htra_api.h" ] && [ ! -f "/opt/htraapi/include/htra_api.h" ]; then
+                echo "Warning: htra_api.h not found in expected locations"
+                echo "Checking for header files..."
+                find /opt /usr/local -name "*.h" | grep -i htra 2>/dev/null || true
+            fi
+            
+            # Update library path if SDK installed in /opt/htraapi
+            if [ -d "/opt/htraapi" ]; then
+                echo "/opt/htraapi/lib" > /etc/ld.so.conf.d/htraapi.conf
+                ldconfig
+                
+                # Add to PKG_CONFIG_PATH if needed
+                export PKG_CONFIG_PATH="/opt/htraapi/lib/pkgconfig:$PKG_CONFIG_PATH"
+                
+                # Add include path for cmake
+                export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+            fi
+            
+            # Build the project
+            cd /workspace/build
+            
+            # Set up build environment with proper paths
+            if [ -d "/opt/htraapi" ]; then
+                export CMAKE_PREFIX_PATH="/opt/htraapi:$CMAKE_PREFIX_PATH"
+                export PKG_CONFIG_PATH="/opt/htraapi/lib/pkgconfig:$PKG_CONFIG_PATH"
+                export LD_LIBRARY_PATH="/opt/htraapi/lib:$LD_LIBRARY_PATH"
+                
+                cmake -DCMAKE_BUILD_TYPE=Release \
+                      -DCMAKE_INSTALL_PREFIX=/usr/local \
+                      -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
+                      -DCMAKE_PREFIX_PATH="/opt/htraapi" \
+                      -DHTRA_INCLUDE_DIR="/opt/htraapi/include" \
+                      -DHTRA_LIBRARY="/opt/htraapi/lib/libhtra_api.so" \
+                      ..
+            else
+                cmake -DCMAKE_BUILD_TYPE=Release \
+                      -DCMAKE_INSTALL_PREFIX=/usr/local \
+                      -DCMAKE_CXX_FLAGS="-O2 -g -DNDEBUG" \
+                      ..
+            fi
+            
+            make -j$(nproc)
+            
+            # Install to temporary directory for packaging
+            DESTDIR=/workspace/debian-package make install
+            
+            # Create debian control file
+            cat > /workspace/debian-package/DEBIAN/control << EOF
+            Package: ${{ env.PACKAGE_NAME }}
+            Version: ${{ steps.version.outputs.VERSION }}
+            Section: electronics
+            Priority: optional
+            Architecture: ${{ matrix.arch }}
+            Depends: libsoapysdr0.8, libc6, libstdc++6, libgcc-s1
+            Maintainer: ${{ env.MAINTAINER }}
+            Description: ${{ env.DESCRIPTION }}
+             This package provides a SoapySDR plugin that allows software supporting
+             the SoapySDR API (like GQRX, GNU Radio, CubicSDR, rtl_433, etc.) to use
+             Harogic HTRA series spectrum analysis devices as general-purpose SDR receivers.
+             .
+             Features include auto-discovery of connected devices, IQ streaming support,
+             configurable sample rates, RF frequency control, and comprehensive gain control.
+            Homepage: ${{ env.HOMEPAGE }}
+            EOF
+            
+            # Create postinst script
+            cat > /workspace/debian-package/DEBIAN/postinst << "EOF"
+            #!/bin/bash
+            set -e
+            
+            # Update library cache
+            ldconfig
+            
+            # Refresh SoapySDR module cache
+            if command -v SoapySDRUtil >/dev/null 2>&1; then
+                echo "Refreshing SoapySDR module cache..."
+                SoapySDRUtil --info >/dev/null 2>&1 || true
+            fi
+            
+            # Create CalFile directory if it does not exist
+            if [ ! -d "/usr/bin/CalFile" ]; then
+                echo "Creating calibration file directory at /usr/bin/CalFile"
+                mkdir -p /usr/bin/CalFile
+                echo "Note: Place your Harogic calibration files in /usr/bin/CalFile"
+                echo "      Calibration files are typically found in the CalFile directory"
+                echo "      from your Harogic device USB stick or SDK installation."
+            fi
+            
+            # Check if Harogic SDK is installed
+            if [ ! -f "/opt/htraapi/lib/libhtra_api.so" ] && [ ! -f "/usr/local/lib/libhtra_api.so" ]; then
+                echo ""
+                echo "WARNING: Harogic HTRA SDK not detected!"
+                echo "Please install the Harogic HTRA SDK before using this plugin."
+                echo "You can download it from:"
+                echo "https://github.com/PentHertz/rfswift_harogic_install/releases"
+                echo ""
+                echo "After downloading Install_HTRA_SDK.zip, extract and run:"
+                echo "  chmod +x install_htraapi_lib.sh"
+                echo "  sudo ./install_htraapi_lib.sh"
+                echo ""
+            fi
+            
+            exit 0
+            EOF
+            
+            # Create prerm script
+            cat > /workspace/debian-package/DEBIAN/prerm << "EOF"
+            #!/bin/bash
+            set -e
+            
+            # Nothing special needed for removal
+            exit 0
+            EOF
+            
+            # Make scripts executable
+            chmod 755 /workspace/debian-package/DEBIAN/postinst
+            chmod 755 /workspace/debian-package/DEBIAN/prerm
+            
+            # Create copyright file
+            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/copyright << "EOF"
+            Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+            Upstream-Name: SoapyHarogic
+            Upstream-Contact: Sébastien Dudek <maintainer@penthertz.com>
+            Source: https://github.com/PentHertz/SoapyHarogic
+            
+            Files: *
+            Copyright: 2024 Sébastien Dudek / penthertz.com
+            License: LGPL-2.1
+             This library is free software; you can redistribute it and/or
+             modify it under the terms of the GNU Lesser General Public
+             License as published by the Free Software Foundation; either
+             version 2.1 of the License, or (at your option) any later version.
+             .
+             This library is distributed in the hope that it will be useful,
+             but WITHOUT ANY WARRANTY; without even the implied warranty of
+             MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+             Lesser General Public License for more details.
+             .
+             You should have received a copy of the GNU Lesser General Public
+             License along with this library; if not, write to the Free Software
+             Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+             .
+             On Debian systems, the complete text of the GNU Lesser General Public
+             License version 2.1 can be found in "/usr/share/common-licenses/LGPL-2.1".
+            EOF
+            
+            # Create changelog
+            cat > /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian << EOF
+            ${{ env.PACKAGE_NAME }} (${{ steps.version.outputs.VERSION }}) unstable; urgency=medium
+            
+              * Automated build from GitHub Actions
+              * Built for ${{ matrix.arch }} architecture
+            
+             -- ${{ env.MAINTAINER }}  $(date -R)
+            EOF
+            
+            # Compress changelog
+            gzip -9 /workspace/debian-package/usr/share/doc/${{ env.PACKAGE_NAME }}/changelog.Debian
+            
+            # Fix permissions
+            find /workspace/debian-package -type f -exec chmod 644 {} \;
+            find /workspace/debian-package -type d -exec chmod 755 {} \;
+            chmod 755 /workspace/debian-package/DEBIAN/postinst
+            chmod 755 /workspace/debian-package/DEBIAN/prerm
+            
+            # Build the .deb package
+            cd /workspace
+            fakeroot dpkg-deb --build debian-package build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb
+            
+            # Verify the package
+            echo "Package contents:"
+            dpkg-deb -c build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb
+            
+            echo "Package info:"
+            dpkg-deb -I build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb
+            
+            # Run lintian checks (non-fatal)
+            lintian build-output/${{ env.PACKAGE_NAME }}_${{ steps.version.outputs.VERSION }}_${{ matrix.arch }}.deb || echo "Lintian warnings (non-fatal)"
+            
+            echo "Build completed successfully for ${{ matrix.arch }}"
+          '
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PACKAGE_NAME }}-${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
+        path: build-output/*.deb
+        retention-days: 30
+
+    - name: Upload to release (if tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: build-output/*.deb
+        draft: true
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job to create a matrix summary
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display build summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Architecture | Status | Package |" >> $GITHUB_STEP_SUMMARY
+        echo "|--------------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+        
+        for arch in amd64 arm64; do
+          if [ -d "artifacts/${{ env.PACKAGE_NAME }}-*-${arch}" ]; then
+            package_file=$(find artifacts/${{ env.PACKAGE_NAME }}-*-${arch} -name "*.deb" | head -1)
+            if [ -n "$package_file" ]; then
+              package_name=$(basename "$package_file")
+              echo "| ${arch} | ✅ Success | \`${package_name}\` |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| ${arch} | ❌ Failed | - |" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "| ${arch} | ❌ Failed | - |" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Installation Instructions" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To install the generated .deb packages:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "# Download the appropriate package for your architecture" >> $GITHUB_STEP_SUMMARY
+        echo "# For x86_64 systems:" >> $GITHUB_STEP_SUMMARY
+        echo "sudo dpkg -i ${{ env.PACKAGE_NAME }}_*_amd64.deb" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# For ARM64 systems:" >> $GITHUB_STEP_SUMMARY
+        echo "sudo dpkg -i ${{ env.PACKAGE_NAME }}_*_arm64.deb" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Install dependencies if needed:" >> $GITHUB_STEP_SUMMARY
+        echo "sudo apt-get install -f" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Note:** You will need to install the Harogic HTRA SDK separately if not already installed:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "# Download and install the Harogic HTRA SDK:" >> $GITHUB_STEP_SUMMARY
+        echo "wget https://github.com/PentHertz/rfswift_harogic_install/releases/download/0.55.61/Install_HTRA_SDK.zip" >> $GITHUB_STEP_SUMMARY
+        echo "unzip Install_HTRA_SDK.zip" >> $GITHUB_STEP_SUMMARY
+        echo "cd Install_HTRA_SDK" >> $GITHUB_STEP_SUMMARY
+        echo "chmod +x install_htraapi_lib.sh" >> $GITHUB_STEP_SUMMARY
+        echo "sudo ./install_htraapi_lib.sh" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Also place calibration files in /usr/bin/CalFile" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
