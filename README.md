@@ -288,3 +288,4 @@ The script provides an interactive menu to:
 You can apply all tweaks at once or individually. A "Revert to Defaults" option is also available. It is recommended to apply these tweaks before running high-bandwidth applications.
 
 🎉 **Happy SDR-ing!** If you encounter any issues, please check the troubleshooting section or open an issue on GitHub. 🐛➡️🔧
+](https://github.com/PentHertz/SoapyHarogic/tree/cf32)](https://github.com/PentHertz/SoapyHarogic/tree/cf32)
