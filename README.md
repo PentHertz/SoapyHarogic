@@ -1,9 +1,3 @@
-Of course. Here is the complete, final version of the `README.md` file. It incorporates all the corrections and updates we've discussed, including the accurate description of the `native_format` stream argument and a strengthened section on performance tuning.
-
-You can replace the entire content of your `README.md` with the text below.
-
----
-
 # 📡 SoapyHarogic
 
 A SoapySDR module for Harogic HTRA series spectrum analysis devices. 🎯
