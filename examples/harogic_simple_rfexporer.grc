@@ -305,7 +305,7 @@ blocks:
     samp_rate: samp_rate
     settings0: PREAMP=0,IF_AGC=0
     settings1: ''
-    stream_args: 'force_8bit=false'
+    stream_args: 'native_format=AUTO'
     tune_args0: ''
     tune_args1: ''
     type: fc32
