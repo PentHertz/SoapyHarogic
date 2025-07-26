@@ -1,3 +1,9 @@
+Of course. Here is the complete, final version of the `README.md` file. It incorporates all the corrections and updates we've discussed, including the accurate description of the `native_format` stream argument and a strengthened section on performance tuning.
+
+You can replace the entire content of your `README.md` with the text below.
+
+---
+
 # 📡 SoapyHarogic
 
 A SoapySDR module for Harogic HTRA series spectrum analysis devices. 🎯
@@ -10,7 +16,7 @@ This module allows software that supports the SoapySDR API (like GQRX, GNU Radio
 ## ✨ Features
 
 - 🔍 Auto-discovery of connected Harogic devices
-- 📊 Supports IQ streaming in complex float 32-bit format (CF32)
+- 📊 Supports IQ streaming in multiple native formats: complex float 32-bit (CF32), complex 16-bit signed integer (CS16), and complex 8-bit signed integer (CS8).
 - ⚙️ Configurable sample rates based on device capabilities
 - 📻 Full control over RF frequency
 - 🎛️ Comprehensive gain control through standard SoapySDR APIs:
@@ -26,7 +32,7 @@ This module allows software that supports the SoapySDR API (like GQRX, GNU Radio
 Before building, you must have the following installed on your system:
 
 - **🧩 SoapySDR Development Libraries**: libsoapysdr-dev
-- **📚 Harogic HTRA API**: The libhtra_api.so library and the htra_api.h header file must be installed in a system path (e.g., /usr/local/lib/, /usr/local/include/, or in /opt/htraapi/***)
+- **📚 Harogic HTRA API**: The `libhtra_api.so` library and the `htra_api.h` header file must be installed in a system path (e.g., /usr/local/lib/, /usr/local/include/, or in /opt/htraapi/***)
 - **🔨 CMake**: cmake
 - **⚡ A C++ Compiler**: g++
 
@@ -45,7 +51,7 @@ If you have another distribution, you can follow [the steps described here for S
 
 ### Quickest way - On Debian/Ubuntu
 
-Get the latest `deb` package depending on your architecture from this project in [releases](https://github.com/PentHertz/SoapyHarogic/releases) and install it with `dpkg` as follows (example with AMD64):
+Get the latest `.deb` package depending on your architecture from this project in [releases](https://github.com/PentHertz/SoapyHarogic/releases) and install it with `dpkg` as follows (example with AMD64):
 
 ```bash
 wget https://github.com/PentHertz/SoapyHarogic/releases/download/v1.0/soapyharogic_1.0_amd64.deb
@@ -55,24 +61,23 @@ sudo apt install -f # installing missing dependencies
 
 After copying the content of your `CalFile` directory provided by Harogic in `/usr/bin/CalFile` in your filesystem, we can install SoapySDR tools to detect our device, or even play with it now on GNU Radio.
 
-To install SoapySDR tools and GNU Radio
-```
-apt install soapysdr-tools
-apt install gnuradio
+To install SoapySDR tools and GNU Radio:
+```bash
+sudo apt install soapysdr-tools gnuradio
 ```
 
 ### 1. 🔨 Install the SDK
 
 To install the SDK, you can take the `Linux_Example/Install_HTRA_SDK` path of your USB stick provided by Harogic, or you can use the [unofficial GitHub repository](https://github.com/PentHertz/rfswift_harogic_install/releases) and download the `Install_HTRA_SDK.zip` you will unzip.
 
-Then enterring in the `Install_HTRA_SDK` folder you can install everything as follows:
+Then entering in the `Install_HTRA_SDK` folder you can install everything as follows:
 
 ```bash
 chmod +x install_htraapi_lib.sh
 ./install_htraapi_lib.sh
 ```
 
-If you have installed Soapy library and the SDK, you are now ready to compile the SoapyHarogic module.
+If you have installed the Soapy library and the SDK, you are now ready to compile the SoapyHarogic module.
 
 ### 2. 🏗️ Build the Module
 
@@ -84,27 +89,18 @@ cd SoapyHarogic
 mkdir build
 cd build
 cmake ..
-make && make install
+make && sudo make install
 ```
 
 This will typically build and install `libsoapyharogic.so` to `/usr/local/lib/SoapySDR/modules0.8/`. 📂
 
 ### 3. 🎯 Calibration files
 
-Calibration file `CalFile` directory must be place in `/usr/bin` or at least you need to make a symlink as `/usr/bin/CalFile` pointing to that directory:
+The calibration file `CalFile` directory must be placed in `/usr/bin` or you must make a symlink at `/usr/bin/CalFile` pointing to that directory:
 
 ```bash
 $ ls /usr/bin/CalFile 
-010_ff00aa00_ifacal.txt  022_ff00aa00_rfacal.txt  056_ff00aa00_rfacal.txt
-010_ff00aa00_rfacal.txt  023_ff00aa00_ifacal.txt  057_ff00aa00_ifacal.txt
-011_ff00aa00_ifacal.txt  023_ff00aa00_rfacal.txt  057_ff00aa00_iqcal.txt
-011_ff00aa00_rfacal.txt  054_ff00aa00_ifacal.txt  057_ff00aa00_rfacal.txt
-012_ff00aa00_ifacal.txt  054_ff00aa00_iqcal.txt   057_ff00aa00_txlcal.txt
-012_ff00aa00_rfacal.txt  054_ff00aa00_rfacal.txt  091_ff00aa00_ifacal.txt
-013_ff00aa00_ifacal.txt  054_ff00aa00_txlcal.txt  091_ff00aa00_rfacal.txt
-013_ff00aa00_rfacal.txt  056_ff00aa00_ifacal.txt
-022_ff00aa00_ifacal.txt  056_ff00aa00_iqcal.txt
-
+010_ff00aa00_ifacal.txt  022_ff00aa00_rfacal.txt  ...
 ```
 
 ### 4. ✅ Verify Installation
@@ -137,24 +133,25 @@ The Reference Level works somewhat counter-intuitively:
 **What is Error -12?**  
 If the device's internal amplifiers or ADC are saturated by a signal that is too strong for the current gain setting, the hardware will report an **IF Overflow** (error code -12).
 
-With the current driver, this is handled as a non-fatal warning. You will see a D (for Dropped/Distorted packet) in your console log, and the stream will continue, but the data will be clipped and unusable.
+With the current driver, this is handled as a non-fatal warning. You will see a `D` (for Dropped/Distorted packet) in your console log, and the stream will continue, but the data will be clipped and unusable.
 
-💡 **How to fix IF Overflow (D spam):** If you see D's in your log or your signal looks "flat-topped" in the waterfall, it means the gain is too high. **Increase the Reference Level** (e.g., from -70 to -50) until the overflow stops.
+💡 **How to fix IF Overflow (`D` spam):** If you see `D`'s in your log or your signal looks "flat-topped" in the waterfall, it means the gain is too high. **Increase the Reference Level** (e.g., from -70 to -50) until the overflow stops.
 
 A good starting point for the Reference Level is typically between **-10 dBm and -30 dBm**. Adjust it based on your antenna and the strength of the signals in your environment.
 
-### 🔢 Sample Format (8-bit vs. 16-bit)
+### 🔢 Sample Format
 
-The device automatically uses different ADC sample resolutions depending on the selected sample rate to optimize performance. This driver handles the conversion automatically. 🤖
+The device can stream samples in multiple native formats. This driver handles the conversion to the application-requested format automatically, but for best performance, you can select the native format explicitly.
 
-- ⚡ For sample rates **greater than 64 MS/s**, the device will stream in **8-bit** format (CS8)
-- 🎯 For sample rates **at or below 64 MS/s**, the device will stream in **16-bit** format (CS16)
+- **`CF32` (Complex Float 32-bit)**: 🚀 Best for performance if your application supports it, as it avoids CPU-intensive conversions on the host computer.
+- **`CS16` (Complex Signed 16-bit Integer)**: 🎯 Good balance of dynamic range and bandwidth.
+- **`CS8` (Complex Signed 8-bit Integer)**: ⚡️ Best for conserving USB bandwidth, but has lower dynamic range.
 
-The driver always converts the native samples to 32-bit complex floats (CF32) for the application, so this is handled transparently. ✨
+By default (`AUTO` mode), the driver will select `CS8` for sample rates **> 62 MS/s** and `CS16` for rates **<= 62 MS/s**. You can override this behavior using the `native_format` stream argument, which is detailed in the "Driver Options" section.
 
 ## SoapyHarogic Driver Options
 
-This document outlines all the configurable options for the SoapyHarogic driver, for use in applications like GQRX, SDR++, GNU Radio, or via the command line with tools like SoapySDRUtil.
+This document outlines all the configurable options for the SoapyHarogic driver, for use in applications like GQRX, SDR++, GNU Radio, or via the command line with tools like `SoapySDRUtil`.
 
 ### Device Arguments
 
@@ -162,11 +159,11 @@ These arguments are used to find and select a specific Harogic device. They are 
 
 |Argument Key|Example Value|Description|
 |---|---|---|
-|driver|harogic|**(Required)** This tells SoapySDR to load the Harogic driver.|
-|serial|313251180036001A|**(Optional)** The unique serial number of the device. Use this if you have multiple Harogic devices connected to your system and need to select a specific one. If omitted, the first device found will be used.|
-|label|Harogic 3132...|**(Read-Only)** A human-readable name for the device, automatically generated by the driver. You can use this to identify the device but cannot set it as an argument.|
+|`driver`|`harogic`|**(Required)** This tells SoapySDR to load the Harogic driver.|
+|`serial`|`313251180036001A`|**(Optional)** The unique serial number of the device. Use this if you have multiple Harogic devices connected and need to select a specific one. If omitted, the first device found will be used.|
+|`label`|`Harogic 3132...`|**(Read-Only)** A human-readable name for the device, automatically generated by the driver. You can use this to identify the device but cannot set it as an argument.|
 
-**Example Device String:** driver=harogic,serial=313251180036001A
+**Example Device String:** `driver=harogic,serial=313251180036001A`
 
 ---
 
@@ -176,9 +173,9 @@ These arguments configure the data stream itself and are typically set once befo
 
 |Argument Key|Example Value|Default|Description|
 |---|---|---|---|
-|force_8bit|true|false|If true, forces the device to use the 8-bit sample format (CS8) regardless of the sample rate. By default, the driver uses 8-bit mode only for rates above 64 MS/s. This can be useful for reducing USB bandwidth at lower rates.|
+|`native_format`|`CF32`|`AUTO`|Selects the data format requested from the hardware. **`AUTO`** selects CS8/CS16 based on the sample rate (> 62 MS/s = CS8). **`CF32`** requests 32-bit floats directly from the device, improving performance by avoiding CPU conversions. **`CS16`** or **`CS8`** forces that specific format.|
 
-**Example Stream Arguments String:** force_8bit=true
+**Example Stream Arguments String:** `native_format=CF32`
 
 ---
 
@@ -190,85 +187,64 @@ These settings control the RF front-end and can usually be adjusted while the st
 
 The active antenna port can be selected from a dropdown menu.
 
-- **Available Options:** External, Internal, ANT, T/R, SWR, INT
+- **Available Options:** `External`, `Internal`, `ANT`, `T/R`, `SWR`, `INT`
     
-
 #### Gain Elements
 
 The Harogic device uses a multi-stage gain system controlled by three separate elements.
 
 |Gain Element|Type|Range|Description|
 |---|---|---|---|
-|REF|Integer|-100 to 7 [dBm]|**Reference Level.** This is the primary gain control. It sets the target power level for the top of the ADC's range. **Use a high value for strong signals to prevent overflow.**|
-|PREAMP|Boolean|On/Off|Toggles the front-end low-noise preamplifier. On (1.0) enables it for better sensitivity on weak signals. Off (0.0) disables it.|
-|IF_AGC|Boolean|On/Off|Toggles the Intermediate Frequency (IF) Automatic Gain Control.|
+|`REF`|Integer|-100 to 7 [dBm]|**Reference Level.** This is the primary gain control. It sets the target power level for the top of the ADC's range. **Use a high value for strong signals to prevent overflow.**|
+|`PREAMP`|Boolean|On/Off|Toggles the front-end low-noise preamplifier. `On` (1.0) enables it for better sensitivity on weak signals. `Off` (0.0) disables it.|
+|`IF_AGC`|Boolean|On/Off|Toggles the Intermediate Frequency (IF) Automatic Gain Control.|
 
 #### Other RF Settings
 
 |Setting Key|Type|Options / Range|Description|
 |---|---|---|---|
-|gain_strategy|String|Low Noise, High Linearity|Optimizes the internal gain distribution. Low Noise is best for weak signals. High Linearity is better for environments with strong signals to prevent intermodulation.|
-|lo_mode|String|Auto, Speed, Spurs, Phase Noise|Controls the Local Oscillator (LO) optimization strategy. Auto is recommended for general use. Other modes trade between tuning speed, spurious signal rejection, and phase noise performance.|
+|`gain_strategy`|String|`Low Noise`, `High Linearity`|Optimizes the internal gain distribution. `Low Noise` is best for weak signals. `High Linearity` is better for environments with strong signals to prevent intermodulation.|
+|`lo_mode`|String|`Auto`, `Speed`, `Spurs`, `Phase Noise`|Controls the Local Oscillator (LO) optimization strategy. `Auto` is recommended for general use. Other modes trade between tuning speed, spurious signal rejection, and phase noise performance.|
 
 ---
-
-### Example Configuration in GNU Radio Companion (GRC)
-
-To configure the Soapy Source block for a Harogic device:
-
-1. **Device Arguments:** driver=harogic
-2. **Stream Arguments:** force_8bit=true (if needed)
-3. **Antenna:** Select from the dropdown (e.g., ANT)
-4. **Gain Settings:**
-    - Set the **"REF"** gain slider to an appropriate value (e.g., -50).
-    - Set the **"PREAMP"** gain slider to 1 (On) or 0 (Off).
-    - Set the **"IF_AGC"** gain slider to 1 (On) or 0 (Off).
-5. **Device Settings:**
-    - In the "Settings" field, you can specify gain_strategy=High Linearity or lo_mode=Spurs.
 
 ## 🎮 Usage
 
 ### 📊 GQRX
 
-GQRX provides the most intuitive interface for controlling the device. 🖥️
+GQRX provides an intuitive interface for controlling the device. 🖥️
 
-1. 🚀 Open GQRX
-2. ⚙️ Click the "Configure I/O devices" button (or go to File -> I/O devices)
-3. 📋 In the "Device" dropdown, select your Harogic device. It should appear with its label. The "Device String" field should automatically populate with `driver=harogic,serial=...`
-4. 🎛️ Go to the **"Input Controls"** tab on the right-hand side. You will find:
-    - 📏 A slider for **REF** (Reference Level)
-    - 🔊 A checkbox for **PREAMP**
-    - 🤖 A checkbox for **IF_AGC**
-    - 🎯 A dropdown for "Gain mode" (maps to our "Gain Strategy")
-        
-5. 🔧 Other device-specific settings like **"LO Mode"** can be found in the main GQRX toolbar under Device -> Device settings
+1. 🚀 Open GQRX.
+2. ⚙️ Click the "Configure I/O devices" button (or go to `File -> I/O devices`).
+3. 📋 In the "Device" dropdown, select your Harogic device. It should appear with its label.
+4. ✍️ In the **"Device String"** field, you can add your stream argument. For example, to use native 32-bit floats, your device string might look like this: `driver=harogic,serial=3132...,native_format=CF32`.
+5. 🎛️ Go to the **"Input Controls"** tab on the right-hand side to adjust gains.
 
 ### 🔬 GNU Radio Companion
 
-Use the **Soapy Custom Source** block for full control. 🎛️
+Use the **Soapy Source** block for full control. 🎛️
 
-1. ➕ Add a "Soapy Custom Source" block to your flowgraph
-2. 🖱️ Double-click the block to open its properties
+1. ➕ Add a "Soapy Source" block to your flowgraph.
+2. 🖱️ Double-click the block to open its properties.
 3. 📋 In the **General** tab:
-    - **Device Arguments**: Set this to `driver=harogic`
-    - **Driver**: Leave this field **blank**
+    - **Device Arguments**: Set this to `driver=harogic`.
+    - **Stream Arguments**: Set this to `native_format=CF32` (or `CS16`, `CS8`).
 4. 📻 In the **RF Options** tab:
-    - **Gain (dB)**: This controls the main **REF** (Reference Level) gain
-    - **Settings**: This field is used to control the other named gains and settings as a comma-separated list of key=value pairs:
-        - 🔊 To enable the Preamp: `PREAMP=1`
-        - 🤖 To enable IF AGC: `IF_AGC=1`
+    - **Gain (dB)**: This controls the main **REF** (Reference Level) gain.
+    - **Antenna**: Select your desired antenna (e.g., `ANT`).
+    - **Settings**: This field is used to control other named settings as a comma-separated list of key=value pairs:
         - 🔄 To set LO Mode to "Spurs": `lo_mode=Spurs`
-        - 🎯 **Combined Example:** `PREAMP=1, IF_AGC=1, lo_mode=Spurs`
+        - 🎯 To set Gain Strategy: `gain_strategy="High Linearity"`
 
 ---
 
 ## ⚡ Performance Tuning and Testing
 
-High-speed SDR streaming (over 60 MS/s) is demanding on the host computer's USB subsystem and CPU. If you experience stream interruptions (often shown as T for timeout or O for overflow in the console), you may need to tune your system for performance.
+High-speed SDR streaming (over 60 MS/s) is demanding on the host computer's USB subsystem and CPU. If you experience stream interruptions (often shown as `T` for timeout, `O` for overflow, or fatal errors in the console), you may need to tune your system for performance. The timeouts (`T`) are a classic symptom of this.
 
 ### Performance Tuning Script
 
-This repository includes a Bash script, performance_mode.sh, to help apply common system optimizations.
+This repository includes a Bash script, `performance_mode.sh`, to help apply common system optimizations. **Running this script is highly recommended if you see `T`'s in your log.**
 
 **Usage:**
 
@@ -287,5 +263,4 @@ The script provides an interactive menu to:
     
 You can apply all tweaks at once or individually. A "Revert to Defaults" option is also available. It is recommended to apply these tweaks before running high-bandwidth applications.
 
-🎉 **Happy SDR-ing!** If you encounter any issues, please check the troubleshooting section or open an issue on GitHub. 🐛➡️🔧
-](https://github.com/PentHertz/SoapyHarogic/tree/cf32)](https://github.com/PentHertz/SoapyHarogic/tree/cf32)
+🎉 **Happy SDR-ing!** If you encounter any issues, please open an issue on GitHub. 🐛➡️🔧
