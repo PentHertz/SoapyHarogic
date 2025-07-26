@@ -18,6 +18,9 @@
  * Or see <https://www.gnu.org/licenses/>.
  */
 
+#ifndef HAROGIC_DEVICE_HPP
+#define HAROGIC_DEVICE_HPP
+
 #include <SoapySDR/Device.hpp>
 #include <SoapySDR/Registry.hpp>
 #include <SoapySDR/Logger.h>
@@ -37,6 +40,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cinttypes>
+#include <cstring> // For memcpy
 
 #define RESOLTRIG 62e6 // thresold for 8-bit resolution
 #define MIN_FREQ 9e3
@@ -179,7 +183,6 @@ class SoapyHarogic : public SoapySDR::Device
         void* _dev_handle;
         DeviceInfo_TypeDef _dev_info;
         IQS_Profile_TypeDef _profile;
-        bool _samps_int8;
         size_t _mtu;
         std::atomic<bool> _rx_thread_running;
         std::thread _rx_worker_thread;
@@ -197,6 +200,8 @@ class SoapyHarogic : public SoapySDR::Device
         LOOptimization_TypeDef _lo_mode;
         std::vector<double> _available_sample_rates;
         std::map<std::string, RxPort_TypeDef> _rx_ports;
-        bool _force_8bit;
         std::atomic<bool> _overflow_flag;
+        std::string _native_format_selection; // To store the user's format choice
 };
+
+#endif // HAROGIC_DEVICE_HPP
